@@ -56,6 +56,20 @@ export const columns: ColumnDef<Surebet>[] = [
     },
   },
   {
+    accessorKey: "event",
+    header: "Event",
+    cell: ({ row }: { row: any }) => {
+      const event = row.getValue("event") as string;
+      const sport = row.original.sport;
+      return (
+        <div className="flex flex-col">
+          <span className="font-medium">{event}</span>
+          <span className="text-sm text-muted-foreground">{sport}</span>
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "sport",
     header: "Sport",
     cell: ({ row }: { row: any }) => {

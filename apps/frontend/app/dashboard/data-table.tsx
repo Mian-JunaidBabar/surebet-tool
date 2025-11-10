@@ -42,11 +42,12 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
-  const [sportFilter, setSportFilter] = React.useState<string>("");
+  // use explicit non-empty tokens for the Select values (Radix requires non-empty values)
+  const [sportFilter, setSportFilter] = React.useState<string>("all");
   const [minProfit, setMinProfit] = React.useState<string>("");
   const [maxProfit, setMaxProfit] = React.useState<string>("");
-  const [bookmakerFilter, setBookmakerFilter] = React.useState<string>("");
-  const [timeFilter, setTimeFilter] = React.useState<string>("");
+  const [bookmakerFilter, setBookmakerFilter] = React.useState<string>("all");
+  const [timeFilter, setTimeFilter] = React.useState<string>("any");
 
   const table = useReactTable({
     data,
@@ -80,13 +81,14 @@ export function DataTable<TData, TValue>({
     const filters: ColumnFiltersState = [];
 
     // Event filter (existing)
-    const eventFilter = table.getColumn("event")?.getFilterValue() as string;
+    const eventFilter =
+      (table.getColumn("event")?.getFilterValue() as string) || "";
     if (eventFilter) {
       filters.push({ id: "event", value: eventFilter });
     }
 
-    // Sport filter
-    if (sportFilter) {
+    // Sport filter ("all" means no filter)
+    if (sportFilter && sportFilter !== "all") {
       table.getColumn("sport")?.setFilterValue(sportFilter);
       filters.push({ id: "sport", value: sportFilter });
     } else {
@@ -103,16 +105,16 @@ export function DataTable<TData, TValue>({
       table.getColumn("profit")?.setFilterValue(undefined);
     }
 
-    // Bookmaker filter
-    if (bookmakerFilter) {
+    // Bookmaker filter ("all" means no filter)
+    if (bookmakerFilter && bookmakerFilter !== "all") {
       table.getColumn("bookmakers")?.setFilterValue(bookmakerFilter);
       filters.push({ id: "bookmakers", value: bookmakerFilter });
     } else {
       table.getColumn("bookmakers")?.setFilterValue(undefined);
     }
 
-    // Time filter
-    if (timeFilter) {
+    // Time filter ("any" means no filter)
+    if (timeFilter && timeFilter !== "any") {
       const now = Date.now();
       let timeThreshold = now;
       switch (timeFilter) {
@@ -136,22 +138,23 @@ export function DataTable<TData, TValue>({
   }, [sportFilter, minProfit, maxProfit, bookmakerFilter, timeFilter, table]);
 
   const clearFilters = () => {
-    setSportFilter("");
+    setSportFilter("all");
     setMinProfit("");
     setMaxProfit("");
-    setBookmakerFilter("");
-    setTimeFilter("");
-    table.getColumn("event")?.setFilterValue("");
+    setBookmakerFilter("all");
+    setTimeFilter("any");
+    table.getColumn("event")?.setFilterValue(undefined);
     setColumnFilters([]);
   };
 
   const hasActiveFilters =
-    sportFilter ||
+    (sportFilter && sportFilter !== "all") ||
     minProfit ||
     maxProfit ||
-    bookmakerFilter ||
-    timeFilter ||
-    (table.getColumn("event")?.getFilterValue() as string);
+    (bookmakerFilter && bookmakerFilter !== "all") ||
+    (timeFilter && timeFilter !== "any") ||
+    (table.getColumn("event")?.getFilterValue() as string) ||
+    "";
 
   return (
     <div className="space-y-4">
@@ -197,7 +200,7 @@ export function DataTable<TData, TValue>({
                 <SelectValue placeholder="All sports" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All sports</SelectItem>
+                <SelectItem value="all">All sports</SelectItem>
                 {sports.map((sport) => (
                   <SelectItem key={sport} value={sport}>
                     {sport}
@@ -238,7 +241,7 @@ export function DataTable<TData, TValue>({
                 <SelectValue placeholder="All bookmakers" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All bookmakers</SelectItem>
+                <SelectItem value="all">All bookmakers</SelectItem>
                 {bookmakers.map((bookmaker) => (
                   <SelectItem key={bookmaker} value={bookmaker}>
                     {bookmaker}
@@ -256,7 +259,7 @@ export function DataTable<TData, TValue>({
                 <SelectValue placeholder="Any time" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Any time</SelectItem>
+                <SelectItem value="any">Any time</SelectItem>
                 <SelectItem value="1h">Last hour</SelectItem>
                 <SelectItem value="6h">Last 6 hours</SelectItem>
                 <SelectItem value="24h">Last 24 hours</SelectItem>
