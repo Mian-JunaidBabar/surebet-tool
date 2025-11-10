@@ -26,6 +26,8 @@ services:
       context: ./apps/scraper
     volumes:
       - ./apps/scraper:/app
+    stdin_open: true
+    tty: true
 
 volumes:
   sqlite_data:

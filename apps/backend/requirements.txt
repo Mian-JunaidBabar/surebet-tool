@@ -1,0 +1,11 @@
+# Core framework and server
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# Database ORM and migration tool
+sqlalchemy==2.0.30
+alembic==1.13.1
+
+# Real-time communication and settings management
+python-socketio==5.11.2
+python-dotenv==1.0.1
