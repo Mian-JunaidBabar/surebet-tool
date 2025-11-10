@@ -1,33 +1,45 @@
+version: "3.9"
+
 services:
+  # The Frontend Service (Next.js)
   frontend:
     build:
       context: ./apps/frontend
     ports:
       - "3000:3000"
     volumes:
+      # Syncs your local code into the container for live editing
       - ./apps/frontend:/app
+      # This prevents your local node_modules from overwriting the container's
       - /app/node_modules
-    stdin_open: true
-    tty: true
+    # The 'npm run dev' command keeps this service running,
+    # so stdin_open and tty are not needed.
 
+  # The Backend API Service (FastAPI)
   backend:
     build:
       context: ./apps/backend
     ports:
       - "8000:8000"
     volumes:
+      # Syncs your local code into the container
       - ./apps/backend:/app
+      # The named volume where the SQLite database will be stored safely
       - sqlite_data:/app/data
-    depends_on:
-      - scraper
+    # Removed 'depends_on' to decouple services. The backend can run
+    # even if the scraper is restarting.
 
+  # The Scraper Service (Playwright)
   scraper:
     build:
       context: ./apps/scraper
     volumes:
+      # Syncs your local code into the container
       - ./apps/scraper:/app
-    stdin_open: true
-    tty: true
+    # THIS IS THE FIX: This command is the standard, reliable way to
+    # keep a container running indefinitely so we can 'exec' into it.
+    command: ["tail", "-f", "/dev/null"]
 
+# Define the named volume for the database so data persists across restarts
 volumes:
   sqlite_data:
