@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # The Frontend Service (Next.js)
   frontend:
