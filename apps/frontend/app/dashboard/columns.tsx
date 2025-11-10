@@ -49,19 +49,18 @@ export const columns: ColumnDef<Surebet>[] = [
         </Badge>
       );
     },
+    filterFn: (row, id, value) => {
+      const profit = row.getValue(id) as number;
+      const [min, max] = value as [number, number];
+      return profit >= min && profit <= max;
+    },
   },
   {
-    accessorKey: "event",
-    header: "Event",
+    accessorKey: "sport",
+    header: "Sport",
     cell: ({ row }: { row: any }) => {
-      const event = row.getValue("event") as string;
-      const sport = row.original.sport;
-      return (
-        <div className="flex flex-col">
-          <span className="font-medium">{event}</span>
-          <span className="text-sm text-muted-foreground">{sport}</span>
-        </div>
-      );
+      const sport = row.getValue("sport") as string;
+      return <span className="text-sm">{sport}</span>;
     },
   },
   {
@@ -85,6 +84,15 @@ export const columns: ColumnDef<Surebet>[] = [
     },
   },
   {
+    accessorKey: "bookmakers",
+    header: () => null,
+    cell: () => null,
+    filterFn: (row, id, value) => {
+      const outcomes = row.original.outcomes;
+      return outcomes.some((outcome) => outcome.bookmaker === value);
+    },
+  },
+  {
     accessorKey: "discoveredAt",
     header: "Discovered",
     cell: ({ row }: { row: any }) => {
@@ -94,6 +102,10 @@ export const columns: ColumnDef<Surebet>[] = [
           {formatTimeAgo(date)}
         </span>
       );
+    },
+    filterFn: (row, id, value) => {
+      const date = row.getValue(id) as Date;
+      return date.getTime() >= value;
     },
   },
   {
