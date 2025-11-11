@@ -7,9 +7,21 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { BarChart3, Settings, Menu, TrendingUp, Target } from "lucide-react";
+import {
+  BarChart3,
+  Settings,
+  Menu,
+  TrendingUp,
+  Target,
+  Home as HomeIcon,
+} from "lucide-react";
 
 const navigation = [
+  {
+    name: "Home",
+    href: "/",
+    icon: HomeIcon,
+  },
   {
     name: "Dashboard",
     href: "/dashboard",
