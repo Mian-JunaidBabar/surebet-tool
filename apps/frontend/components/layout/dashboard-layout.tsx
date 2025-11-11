@@ -11,7 +11,6 @@ import {
   BarChart3,
   Settings,
   Menu,
-  TrendingUp,
   Target,
   Home as HomeIcon,
 } from "lucide-react";
@@ -38,143 +37,93 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-function DesktopSidebar() {
+function Navbar() {
   const pathname = usePathname();
 
   return (
-    <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
-      <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border bg-background px-6 pb-4">
-        <div className="flex h-16 shrink-0 items-center">
-          <div className="flex items-center gap-2">
-            <Target className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">Surebet Tool</span>
-          </div>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+      <div className="container flex h-16 items-center">
+        {/* Logo */}
+        <div className="mr-4 flex">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
+            <Target className="h-6 w-6 text-primary" />
+            <span className="hidden font-bold sm:inline-block">
+              Surebet Tool
+            </span>
+          </Link>
         </div>
-        <nav className="flex flex-1 flex-col">
-          <ul role="list" className="flex flex-1 flex-col gap-y-7">
-            <li>
-              <ul role="list" className="-mx-2 space-y-1">
-                {navigation.map((item) => (
-                  <li key={item.name}>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
+          {navigation.map((item) => (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={cn(
+                "transition-colors hover:text-foreground/80",
+                pathname === item.href
+                  ? "text-foreground"
+                  : "text-foreground/60"
+              )}
+            >
+              {item.name}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
+          <div className="w-full flex-1 md:w-auto md:flex-none">
+            {/* Mobile menu button */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="mr-2 px-0 text-base hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 md:hidden"
+                >
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle Menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="pr-0">
+                <Link href="/" className="flex items-center space-x-2">
+                  <Target className="h-6 w-6 text-primary" />
+                  <span className="font-bold">Surebet Tool</span>
+                </Link>
+                <nav className="my-4 flex flex-col space-y-3">
+                  {navigation.map((item) => (
                     <Link
+                      key={item.name}
                       href={item.href}
                       className={cn(
+                        "transition-colors hover:text-foreground/80",
                         pathname === item.href
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                        "group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 transition-colors"
+                          ? "text-foreground"
+                          : "text-foreground/60"
                       )}
                     >
-                      <item.icon
-                        className="h-6 w-6 shrink-0"
-                        aria-hidden="true"
-                      />
                       {item.name}
                     </Link>
-                  </li>
-                ))}
-              </ul>
-            </li>
-            <li className="mt-auto">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Live Arbitrage</span>
-                </div>
-                <ThemeToggle />
-              </div>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </div>
-  );
-}
-
-function MobileHeader() {
-  const [open, setOpen] = React.useState(false);
-  const pathname = usePathname();
-
-  return (
-    <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-border bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden">
-            <Menu className="h-6 w-6" />
-            <span className="sr-only">Open sidebar</span>
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-72 p-0">
-          <div className="flex h-16 shrink-0 items-center border-b border-border px-6">
-            <div className="flex items-center gap-2">
-              <Target className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">Surebet Tool</span>
-            </div>
-          </div>
-          <nav className="flex flex-1 flex-col px-6 py-4">
-            <ul role="list" className="flex flex-1 flex-col gap-y-7">
-              <li>
-                <ul role="list" className="-mx-2 space-y-1">
-                  {navigation.map((item) => (
-                    <li key={item.name}>
-                      <Link
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className={cn(
-                          pathname === item.href
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                          "group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 transition-colors"
-                        )}
-                      >
-                        <item.icon
-                          className="h-6 w-6 shrink-0"
-                          aria-hidden="true"
-                        />
-                        {item.name}
-                      </Link>
-                    </li>
                   ))}
-                </ul>
-              </li>
-            </ul>
-          </nav>
-          <div className="border-t border-border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
-                <span>Live Arbitrage</span>
-              </div>
-              <ThemeToggle />
-            </div>
+                </nav>
+              </SheetContent>
+            </Sheet>
           </div>
-        </SheetContent>
-      </Sheet>
-
-      <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="flex items-center gap-2">
-          <Target className="h-6 w-6 text-primary lg:hidden" />
-          <span className="text-lg font-semibold lg:hidden">Surebet Tool</span>
-        </div>
-        <div className="flex flex-1" />
-        <div className="hidden lg:flex lg:items-center lg:justify-end">
-          <ThemeToggle />
+          <nav className="flex items-center">
+            <ThemeToggle />
+          </nav>
         </div>
       </div>
-    </div>
+    </header>
   );
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
-      <DesktopSidebar />
-      <div className="lg:pl-72">
-        <MobileHeader />
-        <main className="py-10">
-          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
-        </main>
-      </div>
+      <Navbar />
+      <main className="flex-1">
+        <div className="container py-6">{children}</div>
+      </main>
     </div>
   );
 }
