@@ -44,73 +44,82 @@ export default function SettingsPage() {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-8">Settings</h1>
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8 text-center">Settings</h1>
 
-      <div className="space-y-6 max-w-2xl">
-        {/* Bookmaker Settings Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Bookmaker Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {bookmakers.map((bookmaker) => (
-                <div
-                  key={bookmaker.id}
-                  className="flex items-center justify-between"
-                >
-                  <Label htmlFor={bookmaker.id} className="cursor-pointer">
-                    {bookmaker.name}
+        <div className="space-y-6">
+          {/* Bookmaker Settings Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">Bookmaker Settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {bookmakers.map((bookmaker) => (
+                  <div
+                    key={bookmaker.id}
+                    className="flex items-center justify-center gap-4"
+                  >
+                    <Label
+                      htmlFor={bookmaker.id}
+                      className="cursor-pointer text-center flex-1"
+                    >
+                      {bookmaker.name}
+                    </Label>
+                    <Switch
+                      id={bookmaker.id}
+                      checked={bookmaker.enabled}
+                      onCheckedChange={() =>
+                        handleToggleBookmaker(bookmaker.id)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Data Settings Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">Data Settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="refresh-interval">
+                    Refresh Interval (seconds)
                   </Label>
-                  <Switch
-                    id={bookmaker.id}
-                    checked={bookmaker.enabled}
-                    onCheckedChange={() => handleToggleBookmaker(bookmaker.id)}
+                  <Input
+                    id="refresh-interval"
+                    type="number"
+                    value={refreshInterval}
+                    onChange={(e) => setRefreshInterval(e.target.value)}
+                    placeholder="30"
                   />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Data Settings Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="refresh-interval">
-                  Refresh Interval (seconds)
-                </Label>
-                <Input
-                  id="refresh-interval"
-                  type="number"
-                  value={refreshInterval}
-                  onChange={(e) => setRefreshInterval(e.target.value)}
-                  placeholder="30"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="min-profit">
+                    Minimum Profit Threshold (%)
+                  </Label>
+                  <Input
+                    id="min-profit"
+                    type="number"
+                    step="0.1"
+                    value={minProfit}
+                    onChange={(e) => setMinProfit(e.target.value)}
+                    placeholder="2.0"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="min-profit">Minimum Profit Threshold (%)</Label>
-                <Input
-                  id="min-profit"
-                  type="number"
-                  step="0.1"
-                  value={minProfit}
-                  onChange={(e) => setMinProfit(e.target.value)}
-                  placeholder="2.0"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Save Button */}
-        <Button onClick={handleSave} className="w-full">
-          Save Settings
-        </Button>
+          {/* Save Button */}
+          <Button onClick={handleSave} className="w-full">
+            Save Settings
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -88,8 +88,8 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="border bg-card/60 backdrop-blur">
-            <CardContent className="p-6 space-y-3">
-              <Search className="h-8 w-8 text-primary" />
+            <CardContent className="p-6 space-y-3 text-center">
+              <Search className="h-8 w-8 text-primary mx-auto" />
               <h3 className="font-semibold text-lg">1. Scan Odds</h3>
               <p className="text-sm text-muted-foreground">
                 We continuously scan bookmakers to surface cross-market
@@ -98,8 +98,8 @@ export default function Home() {
             </CardContent>
           </Card>
           <Card className="border bg-card/60 backdrop-blur">
-            <CardContent className="p-6 space-y-3">
-              <Calculator className="h-8 w-8 text-primary" />
+            <CardContent className="p-6 space-y-3 text-center">
+              <Calculator className="h-8 w-8 text-primary mx-auto" />
               <h3 className="font-semibold text-lg">2. Compute Stakes</h3>
               <p className="text-sm text-muted-foreground">
                 Automatic stake calculation distributes capital for guaranteed
@@ -108,8 +108,8 @@ export default function Home() {
             </CardContent>
           </Card>
           <Card className="border bg-card/60 backdrop-blur">
-            <CardContent className="p-6 space-y-3">
-              <ShieldCheck className="h-8 w-8 text-primary" />
+            <CardContent className="p-6 space-y-3 text-center">
+              <ShieldCheck className="h-8 w-8 text-primary mx-auto" />
               <h3 className="font-semibold text-lg">3. Place Bets</h3>
               <p className="text-sm text-muted-foreground">
                 Execute with your preferred books and lock in the arbitrage

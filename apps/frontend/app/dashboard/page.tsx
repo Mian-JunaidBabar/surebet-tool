@@ -17,13 +17,13 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header Section */}
-      <div className="border-b bg-linear-to-r from-primary/20 via-secondary/10 to-accent/20">
-        <div className="container mx-auto px-4 py-8 flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-2">
+      <div className="border-b bg-linear-to-r from-primary/20 via-secondary/10 to-accent/">
+        <div className="container mx-auto px-4 py-8 flex flex-col items-center text-center gap-4">
+          <div className="space-y-2 max-w-2xl mx-auto">
             <h1 className="text-3xl font-bold tracking-tight">
               Live Surebet Opportunities
             </h1>
-            <p className="text-muted-foreground max-w-xl text-sm sm:text-base">
+            <p className="text-muted-foreground text-sm sm:text-base">
               Monitor real-time arbitrage edges across supported bookmakers. Use
               filters to refine and act quickly.
             </p>
@@ -34,7 +34,7 @@ export default function DashboardPage() {
 
       {/* Stats Overview */}
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
           <Card className="bg-card/60 backdrop-blur">
             <CardContent className="p-4 flex flex-col gap-1">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -76,7 +76,7 @@ export default function DashboardPage() {
 
       {/* Data Table */}
       <div className="container mx-auto px-4 pb-12">
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden max-w-7xl mx-auto">
           <CardContent className="p-6">
             <DataTable columns={columns} data={mockData} />
           </CardContent>
