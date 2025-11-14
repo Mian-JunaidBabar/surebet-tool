@@ -12,3 +12,6 @@ pydantic==2.7.1
 # Real-time communication and settings management
 python-socketio==5.11.2
 python-dotenv==1.0.1
+
+# HTTP requests
+requests==2.31.0

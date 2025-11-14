@@ -24,19 +24,26 @@ services:
       - ./apps/backend:/app
       # The named volume where the SQLite database will be stored safely
       - sqlite_data:/app/data
-    # Removed 'depends_on' to decouple services. The backend can run
-    # even if the scraper is restarting.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # The Scraper Service (Playwright)
   scraper:
     build:
       context: ./apps/scraper
+    ports:
+      - "8001:8001"
     volumes:
       # Syncs your local code into the container
       - ./apps/scraper:/app
-    # THIS IS THE FIX: This command is the standard, reliable way to
-    # keep a container running indefinitely so we can 'exec' into it.
-    command: ["tail", "-f", "/dev/null"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Run the FastAPI server
+    command: ["uvicorn", "scraper:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # Define the named volume for the database so data persists across restarts
 volumes:

@@ -15,5 +15,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # The default command to run when the container starts
-# We will likely override this in docker-compose to run specific scripts
-CMD ["python", "scraper.py"]
+# Run the FastAPI server using uvicorn
+CMD ["uvicorn", "scraper:app", "--host", "0.0.0.0", "--port", "8001"]

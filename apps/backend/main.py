@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List
 import socketio
-import subprocess
 import logging
+import requests
 
 # Configure logging
 logging.basicConfig(
@@ -29,22 +29,56 @@ db = SessionLocal()
 try:
     # Check if any scraper targets exist
     existing_targets = db.query(models.ScraperTarget).first()
-    
+
     if existing_targets is None:
-        logger.info("📍 No scraper targets found. Creating default target...")
-        
-        # Create default scraper target
-        default_target = models.ScraperTarget(
-            name="BetExplorer Premier League",
-            url="https://www.betexplorer.com/football/england/premier-league/",
-            is_active=True
-        )
-        
-        db.add(default_target)
+        logger.info("📍 No scraper targets found. Creating default targets...")
+
+        # Create default scraper targets for multiple sports
+        default_targets = [
+            models.ScraperTarget(
+                name="BetExplorer Football",
+                url="https://www.betexplorer.com/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Basketball",
+                url="https://www.betexplorer.com/basketball/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Hockey",
+                url="https://www.betexplorer.com/hockey/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Tennis",
+                url="https://www.betexplorer.com/tennis/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Baseball",
+                url="https://www.betexplorer.com/baseball/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Volleyball",
+                url="https://www.betexplorer.com/volleyball/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="BetExplorer Handball",
+                url="https://www.betexplorer.com/handball/",
+                is_active=True
+            )
+        ]
+
+        for target in default_targets:
+            db.add(target)
+            logger.info(f"✅ Created default scraper target: {target.name}")
+
         db.commit()
-        db.refresh(default_target)
-        
-        logger.info(f"✅ Created default scraper target: {default_target.name}")
+
+        logger.info(f"✅ Created {len(default_targets)} default scraper targets")
     else:
         logger.info("✅ Scraper targets already exist, skipping seeding")
         
@@ -506,30 +540,45 @@ async def delete_scraper_target_endpoint(
 async def trigger_scraper():
     """
     Trigger the scraper to run immediately.
-    
-    This endpoint starts the scraper process in the background using Docker Compose.
-    
+
+    This endpoint sends a request to the scraper service to start scraping.
+
     Returns:
         Success message with scraper status
     """
     try:
         logger.info("Triggering scraper run...")
+
+        # Make POST request to scraper service
+        scraper_url = "http://scraper:8001/run-scrape"
         
-        # Start scraper in background
-        process = subprocess.Popen(
-            ["docker-compose", "exec", "-T", "scraper", "python", "scraper.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+        response = requests.post(
+            scraper_url,
+            timeout=5  # Short timeout since scraper runs in background
         )
-        
-        logger.info(f"Scraper process started with PID: {process.pid}")
-        
-        return {
-            "message": "Scraper triggered successfully",
-            "status": "running",
-            "process_id": process.pid
-        }
-        
+
+        if response.status_code == 200:
+            logger.info("Scraper triggered successfully")
+            return response.json()
+        else:
+            logger.error(f"Scraper service returned error: {response.status_code}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Scraper service error: {response.text}"
+            )
+
+    except requests.exceptions.ConnectionError:
+        logger.error("Could not connect to scraper service")
+        raise HTTPException(
+            status_code=503,
+            detail="Scraper service is not available"
+        )
+    except requests.exceptions.Timeout:
+        logger.error("Request to scraper service timed out")
+        raise HTTPException(
+            status_code=504,
+            detail="Scraper service timed out"
+        )
     except Exception as e:
         logger.error(f"Error triggering scraper: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
