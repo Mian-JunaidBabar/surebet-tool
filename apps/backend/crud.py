@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 import models
 import schemas
 from typing import List, Optional
@@ -161,7 +162,7 @@ def get_events_with_multiple_outcomes(db: Session) -> List[models.Event]:
     Returns:
         List of event models that have multiple outcomes
     """
-    return db.query(models.Event).join(models.Outcome).group_by(models.Event.id).having(db.func.count(models.Outcome.id) >= 2).all()
+    return db.query(models.Event).join(models.Outcome).group_by(models.Event.id).having(func.count(models.Outcome.id) >= 2).all()
 
 
 # ============================================================================

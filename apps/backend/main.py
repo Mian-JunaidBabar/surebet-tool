@@ -58,9 +58,13 @@ finally:
 # Initialize Socket.IO server
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    cors_allowed_origins='*',  # Allow all origins
     logger=True,
-    engineio_logger=True
+    engineio_logger=False,
+    ping_timeout=60,
+    ping_interval=25,
+    allow_upgrades=True,
+    cookie=None
 )
 
 # Initialize FastAPI application
@@ -70,16 +74,20 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Wrap FastAPI app with Socket.IO
-socket_app = socketio.ASGIApp(sio, app)
-
-# Configure CORS
+# Configure CORS before mounting Socket.IO
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify exact origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Mount Socket.IO app at /socket.io path
+socket_app = socketio.ASGIApp(
+    socketio_server=sio,
+    other_asgi_app=app,
+    socketio_path='socket.io'
 )
 
 
