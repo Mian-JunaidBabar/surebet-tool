@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List
+from pydantic import BaseModel
 import socketio
 import logging
 import requests
@@ -19,6 +20,14 @@ import models
 import schemas
 import crud
 from database import SessionLocal, engine, get_db
+
+
+# Pydantic model for test scrape requests
+class TestScrapeRequest(BaseModel):
+    """Request model for testing scraper without database saves"""
+    url: str
+    strategy: str  # "betexplorer", "oddschecker", or "oddsportal"
+
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
@@ -158,6 +167,9 @@ def calculate_surebet_profit(outcomes: List[models.Outcome]) -> tuple[bool, floa
     """
     Calculate if an event is a surebet and its profit percentage.
     
+    For a surebet, we need to find the BEST odds for each unique outcome type
+    (e.g., "Home Win", "Draw", "Away Win") across all bookmakers.
+    
     Args:
         outcomes: List of outcome models
         
@@ -167,10 +179,24 @@ def calculate_surebet_profit(outcomes: List[models.Outcome]) -> tuple[bool, floa
     if len(outcomes) < 2:
         return False, 0.0, 0.0
     
-    # Calculate sum of inverse odds: (1/odds1) + (1/odds2) + ...
-    total_inverse_odds = sum(1/outcome.odds for outcome in outcomes)
+    # Group outcomes by outcome name (e.g., "Home Win", "Draw", "Away Win")
+    # and find the BEST (highest) odds for each outcome type
+    best_odds_per_outcome = {}
     
-    # If sum < 1, it's a surebet
+    for outcome in outcomes:
+        outcome_name = outcome.name
+        current_odds = outcome.odds
+        
+        if outcome_name not in best_odds_per_outcome:
+            best_odds_per_outcome[outcome_name] = current_odds
+        else:
+            # Keep the highest odds (best for bettor)
+            best_odds_per_outcome[outcome_name] = max(best_odds_per_outcome[outcome_name], current_odds)
+    
+    # Calculate sum of inverse odds using BEST odds for each outcome type
+    total_inverse_odds = sum(1/odds for odds in best_odds_per_outcome.values())
+    
+    # If sum < 1, it's a surebet (arbitrage opportunity)
     is_surebet = total_inverse_odds < 1.0
     
     # Calculate profit percentage
@@ -595,6 +621,123 @@ async def trigger_scraper():
     except Exception as e:
         logger.error(f"Error triggering scraper: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
+
+
+@app.post("/api/v1/scraper/test-target")
+async def test_scrape_target(request: TestScrapeRequest):
+    """
+    Test scraping a single URL without saving to database.
+    
+    This endpoint enables rapid iteration and debugging:
+    - Accepts a URL and scraping strategy
+    - Forwards request to scraper service
+    - Returns raw scraped data without database persistence
+    - Perfect for testing and development
+    
+    Example request:
+    {
+        "url": "https://www.betexplorer.com/football/",
+        "strategy": "betexplorer"
+    }
+    
+    Returns:
+        Raw scraped data from the scraper service
+    """
+    try:
+        logger.info(f"🧪 Test scrape requested - URL: {request.url}, Strategy: {request.strategy}")
+
+        # Forward request to scraper service
+        scraper_url = "http://scraper:8001/test-scrape"
+        
+        response = requests.post(
+            scraper_url,
+            json={
+                "url": request.url,
+                "strategy": request.strategy
+            },
+            timeout=60  # Longer timeout since we wait for scraping to complete
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✅ Test scrape completed: {result.get('count', 0)} events scraped")
+            return result
+        else:
+            logger.error(f"Scraper service returned error: {response.status_code}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Scraper service error: {response.text}"
+            )
+
+    except requests.exceptions.ConnectionError:
+        logger.error("Could not connect to scraper service")
+        raise HTTPException(
+            status_code=503,
+            detail="Scraper service is not available"
+        )
+    except requests.exceptions.Timeout:
+        logger.error("Request to scraper service timed out (>60s)")
+        raise HTTPException(
+            status_code=504,
+            detail="Scraper service timed out - target site may be slow or unreachable"
+        )
+    except Exception as e:
+        logger.error(f"Error during test scrape: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error during test scrape: {str(e)}")
+
+
+@app.post("/api/v1/scraper/generate-mock-data")
+async def generate_mock_data():
+    """
+    Generate mock betting data for testing.
+    
+    This endpoint triggers the scraper to generate realistic sample data
+    and send it through the normal ingestion pipeline. Perfect for:
+    - Testing the full data flow
+    - Demonstrating surebet detection
+    - Frontend development
+    - When real sites are blocking the scraper
+    
+    Returns:
+        Success message with count of generated events
+    """
+    try:
+        logger.info("🎭 Triggering mock data generation...")
+
+        # Make GET request to scraper service
+        scraper_url = "http://scraper:8001/generate-mock-data"
+        
+        response = requests.get(
+            scraper_url,
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"✅ Mock data generated: {result.get('count', 0)} events")
+            return result
+        else:
+            logger.error(f"Scraper service returned error: {response.status_code}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Scraper service error: {response.text}"
+            )
+
+    except requests.exceptions.ConnectionError:
+        logger.error("Could not connect to scraper service")
+        raise HTTPException(
+            status_code=503,
+            detail="Scraper service is not available"
+        )
+    except requests.exceptions.Timeout:
+        logger.error("Request to scraper service timed out")
+        raise HTTPException(
+            status_code=504,
+            detail="Scraper service timed out"
+        )
+    except Exception as e:
+        logger.error(f"Error generating mock data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating mock data: {str(e)}")
 
 
 @app.get("/api/v1/run-full-test")
