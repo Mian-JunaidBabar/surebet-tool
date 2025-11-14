@@ -1,17 +1,17 @@
 services:
   # The Frontend Service (Next.js)
-  # frontend:
-  #   build:
-  #     context: ./apps/frontend
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     # Syncs your local code into the container for live editing
-  #     - ./apps/frontend:/app
-  #     # This prevents your local node_modules from overwriting the container's
-  #     - /app/node_modules
-  #   # The 'npm run dev' command keeps this service running,
-  #   # so stdin_open and tty are not needed.
+  frontend:
+    build:
+      context: ./apps/frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      # Syncs your local code into the container for live editing
+      - ./apps/frontend:/app
+      # This prevents your local node_modules from overwriting the container's
+      - /app/node_modules
+    # The 'npm run dev' command keeps this service running,
+    # so stdin_open and tty are not needed.
 
   # The Backend API Service (FastAPI)
   backend:

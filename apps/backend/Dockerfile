@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
+# Create the data directory for the SQLite database
+RUN mkdir -p /app/data
+
 # Expose the port FastAPI/uvicorn will run on
 EXPOSE 8000
 

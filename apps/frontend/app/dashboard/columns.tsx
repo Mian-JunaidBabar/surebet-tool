@@ -1,7 +1,7 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal } from "lucide-react";
+import { ExternalLink, MoreHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,39 +10,32 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Surebet } from "./mock-data";
+import Link from "next/link";
 
-/**
- * Format a date to show time elapsed (e.g., "5 minutes ago")
- */
-function formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+// Updated TypeScript types matching backend SurebetEvent schema
+export type SurebetEvent = {
+  id: number;
+  event_id: string;
+  event: string;
+  sport: string;
+  outcomes: Array<{
+    id: number;
+    event_id: number;
+    bookmaker: string;
+    name: string;
+    odds: number;
+    deep_link_url: string;
+  }>;
+  profit_percentage: number;
+  total_inverse_odds: number;
+};
 
-  if (diffInSeconds < 60) {
-    return `${diffInSeconds} second${diffInSeconds !== 1 ? "s" : ""} ago`;
-  }
-
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} minute${diffInMinutes !== 1 ? "s" : ""} ago`;
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours} hour${diffInHours !== 1 ? "s" : ""} ago`;
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays} day${diffInDays !== 1 ? "s" : ""} ago`;
-}
-
-export const columns: ColumnDef<Surebet>[] = [
+export const columns: ColumnDef<SurebetEvent>[] = [
   {
-    accessorKey: "profit",
+    accessorKey: "profit_percentage",
     header: "Profit",
     cell: ({ row }: { row: any }) => {
-      const profit = row.getValue("profit") as number;
+      const profit = row.getValue("profit_percentage") as number;
       return (
         <Badge variant="default" className="font-semibold">
           {profit.toFixed(2)}%
@@ -81,18 +74,20 @@ export const columns: ColumnDef<Surebet>[] = [
     accessorKey: "outcomes",
     header: "Bets",
     cell: ({ row }: { row: any }) => {
-      const outcomes = row.getValue("outcomes") as Surebet["outcomes"];
+      const outcomes = row.getValue("outcomes") as SurebetEvent["outcomes"];
       return (
         <div className="flex flex-col gap-1">
-          {outcomes.map((outcome, index) => (
-            <div key={index} className="text-sm">
-              <span className="font-medium">{outcome.bookmaker}</span>
-              {" - "}
-              <span className="text-muted-foreground">{outcome.name}</span>
-              {" @ "}
-              <span className="font-semibold">{outcome.odds.toFixed(2)}</span>
-            </div>
-          ))}
+          {outcomes.map(
+            (outcome: SurebetEvent["outcomes"][0], index: number) => (
+              <div key={outcome.id} className="text-sm">
+                <span className="font-medium">{outcome.bookmaker}</span>
+                {" - "}
+                <span className="text-muted-foreground">{outcome.name}</span>
+                {" @ "}
+                <span className="font-semibold">{outcome.odds.toFixed(2)}</span>
+              </div>
+            )
+          )}
         </div>
       );
     },
@@ -103,52 +98,84 @@ export const columns: ColumnDef<Surebet>[] = [
     cell: () => null,
     filterFn: (row, id, value) => {
       const outcomes = row.original.outcomes;
-      return outcomes.some((outcome) => outcome.bookmaker === value);
+      return outcomes.some(
+        (outcome: SurebetEvent["outcomes"][0]) => outcome.bookmaker === value
+      );
     },
   },
   {
-    accessorKey: "discoveredAt",
-    header: "Discovered",
+    accessorKey: "total_inverse_odds",
+    header: "Inverse Odds",
     cell: ({ row }: { row: any }) => {
-      const date = row.getValue("discoveredAt") as Date;
+      const total = row.getValue("total_inverse_odds") as number;
       return (
         <span className="text-sm text-muted-foreground">
-          {formatTimeAgo(date)}
+          {total.toFixed(4)}
         </span>
       );
-    },
-    filterFn: (row, id, value) => {
-      const date = row.getValue(id) as Date;
-      return date.getTime() >= value;
     },
   },
   {
     id: "actions",
     header: "Actions",
     cell: ({ row }: { row: any }) => {
-      const surebet = row.original;
+      const surebet = row.original as SurebetEvent;
+      const firstOutcome = surebet.outcomes[0];
 
       return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => console.log("View details:", surebet.id)}
+        <div className="flex items-center gap-2">
+          {/* Go to Bet Button */}
+          {firstOutcome && firstOutcome.deep_link_url && (
+            <Link
+              href={firstOutcome.deep_link_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex"
             >
-              View Details
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => console.log("Calculate stakes:", surebet.id)}
-            >
-              Calculate Stakes
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <Button variant="default" size="sm" className="gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Go to Bet
+              </Button>
+            </Link>
+          )}
+
+          {/* Additional Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => console.log("View details:", surebet.event_id)}
+              >
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  console.log("Calculate stakes:", surebet.event_id)
+                }
+              >
+                Calculate Stakes
+              </DropdownMenuItem>
+              {surebet.outcomes.map((outcome) => (
+                <DropdownMenuItem key={outcome.id} asChild>
+                  <Link
+                    href={outcome.deep_link_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {outcome.bookmaker} - {outcome.name}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       );
     },
   },
