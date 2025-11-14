@@ -33,8 +33,9 @@ try:
     if existing_targets is None:
         logger.info("📍 No scraper targets found. Creating default targets...")
 
-        # Create default scraper targets for multiple sports
+        # Create default scraper targets for multiple sports and sites
         default_targets = [
+            # BetExplorer targets
             models.ScraperTarget(
                 name="BetExplorer Football",
                 url="https://www.betexplorer.com/",
@@ -68,6 +69,28 @@ try:
             models.ScraperTarget(
                 name="BetExplorer Handball",
                 url="https://www.betexplorer.com/handball/",
+                is_active=True
+            ),
+            # Oddschecker targets
+            models.ScraperTarget(
+                name="Oddschecker Homepage",
+                url="https://www.oddschecker.com/",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="Oddschecker Football",
+                url="https://www.oddschecker.com/football",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="Oddschecker Horse Racing",
+                url="https://www.oddschecker.com/horse-racing",
+                is_active=True
+            ),
+            # Oddsportal targets
+            models.ScraperTarget(
+                name="Oddsportal Homepage",
+                url="https://www.oddsportal.com/",
                 is_active=True
             )
         ]
