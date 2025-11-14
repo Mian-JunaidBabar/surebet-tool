@@ -3,6 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List
+import socketio
+import subprocess
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import our modules
 import models
@@ -13,12 +23,23 @@ from database import SessionLocal, engine, get_db
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
+# Initialize Socket.IO server
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins='*',
+    logger=True,
+    engineio_logger=True
+)
+
 # Initialize FastAPI application
 app = FastAPI(
     title="Surebet Tool API",
-    description="Complete API for ingesting scraped betting data and serving surebet opportunities",
-    version="1.0.0"
+    description="Complete API for ingesting scraped betting data and serving surebet opportunities with real-time updates",
+    version="2.0.0"
 )
+
+# Wrap FastAPI app with Socket.IO
+socket_app = socketio.ASGIApp(sio, app)
 
 # Configure CORS
 app.add_middleware(
@@ -91,7 +112,7 @@ async def ingest_data(events: List[schemas.EventCreate], db: Session = Depends(g
     
     # Log receipt of data
     event_count = len(events)
-    print(f"📥 Received {event_count} events from scraper")
+    logger.info(f"📥 Received {event_count} events from scraper")
     
     processed_count = 0
     errors = []
@@ -99,14 +120,14 @@ async def ingest_data(events: List[schemas.EventCreate], db: Session = Depends(g
     # Process each event
     for idx, event in enumerate(events, 1):
         try:
-            print(f"  [{idx}] Processing: {event.event}")
-            print(f"      Sport: {event.sport}")
-            print(f"      Event ID: {event.event_id}")
-            print(f"      Outcomes: {len(event.outcomes)}")
+            logger.info(f"  [{idx}] Processing: {event.event}")
+            logger.debug(f"      Sport: {event.sport}")
+            logger.debug(f"      Event ID: {event.event_id}")
+            logger.debug(f"      Outcomes: {len(event.outcomes)}")
             
             # Log each outcome for the event
             for outcome in event.outcomes:
-                print(f"        - {outcome.name}: {outcome.odds} ({outcome.bookmaker})")
+                logger.debug(f"        - {outcome.name}: {outcome.odds} ({outcome.bookmaker})")
             
             # Upsert the event (create or update with fresh outcomes)
             db_event = crud.upsert_event(db, event)
@@ -114,19 +135,57 @@ async def ingest_data(events: List[schemas.EventCreate], db: Session = Depends(g
             
         except SQLAlchemyError as e:
             error_msg = f"Database error for event {event.event_id}: {str(e)}"
-            print(f"❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             errors.append(error_msg)
         except Exception as e:
             error_msg = f"Unexpected error for event {event.event_id}: {str(e)}"
-            print(f"❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             errors.append(error_msg)
     
-    print(f"✅ Successfully processed {processed_count}/{event_count} events")
+    logger.info(f"✅ Successfully processed {processed_count}/{event_count} events")
     
     if errors:
-        print(f"⚠️  Encountered {len(errors)} errors:")
+        logger.warning(f"⚠️  Encountered {len(errors)} errors:")
         for error in errors:
-            print(f"    - {error}")
+            logger.warning(f"    - {error}")
+    
+    # Calculate and emit surebets via WebSocket after successful ingestion
+    try:
+        events_db = crud.get_events_with_multiple_outcomes(db)
+        surebets = []
+        
+        for event_db in events_db:
+            is_surebet, profit_percentage, total_inverse_odds = calculate_surebet_profit(event_db.outcomes)
+            
+            if is_surebet:
+                surebet_event = schemas.SurebetEvent(
+                    id=event_db.id,
+                    event_id=event_db.event_id,
+                    event=event_db.event,
+                    sport=event_db.sport,
+                    outcomes=[
+                        schemas.Outcome(
+                            id=outcome.id,
+                            event_id=outcome.event_id,
+                            bookmaker=outcome.bookmaker,
+                            name=outcome.name,
+                            odds=outcome.odds,
+                            deep_link_url=outcome.deep_link_url
+                        )
+                        for outcome in event_db.outcomes
+                    ],
+                    profit_percentage=profit_percentage,
+                    total_inverse_odds=total_inverse_odds
+                )
+                surebets.append(surebet_event)
+        
+        # Emit to all connected WebSocket clients
+        if surebets:
+            await emit_new_surebets(surebets)
+            logger.info(f"📡 Emitted {len(surebets)} surebets to WebSocket clients")
+        
+    except Exception as e:
+        logger.error(f"Error calculating/emitting surebets: {str(e)}")
     
     # Return success response
     return schemas.IngestionResponse(
@@ -186,7 +245,7 @@ async def get_surebets(db: Session = Depends(get_db)):
         # Sort by profit percentage (highest first)
         surebets.sort(key=lambda x: x.profit_percentage, reverse=True)
         
-        print(f"🎯 Found {len(surebets)} surebet opportunities out of {len(events)} events")
+        logger.info(f"🎯 Found {len(surebets)} surebet opportunities out of {len(events)} events")
         
         return schemas.SurebetsResponse(
             surebets=surebets,
@@ -195,16 +254,292 @@ async def get_surebets(db: Session = Depends(get_db)):
         )
         
     except SQLAlchemyError as e:
-        print(f"❌ Database error while fetching surebets: {str(e)}")
+        logger.error(f"❌ Database error while fetching surebets: {str(e)}")
         raise HTTPException(status_code=500, detail="Database error while fetching surebets")
     except Exception as e:
-        print(f"❌ Unexpected error while fetching surebets: {str(e)}")
+        logger.error(f"❌ Unexpected error while fetching surebets: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# ============================================================================
+# Settings Endpoints
+# ============================================================================
+
+@app.get("/api/v1/settings", response_model=schemas.SettingsResponse)
+async def get_settings(db: Session = Depends(get_db)):
+    """
+    Get all application settings.
+    
+    Returns:
+        SettingsResponse with all settings as key-value pairs
+    """
+    try:
+        settings = crud.get_all_settings(db)
+        logger.info(f"Retrieved {len(settings)} settings")
+        
+        return schemas.SettingsResponse(
+            settings=settings,
+            status="success"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching settings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching settings")
+
+
+@app.post("/api/v1/settings", response_model=schemas.SettingsResponse)
+async def update_settings_endpoint(
+    settings_update: schemas.SettingsUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update multiple application settings.
+    
+    Args:
+        settings_update: Dictionary of settings to update
+        db: Database session dependency
+        
+    Returns:
+        SettingsResponse with updated settings
+    """
+    try:
+        updated_settings = crud.update_settings(db, settings_update.settings)
+        logger.info(f"Updated {len(settings_update.settings)} settings")
+        
+        return schemas.SettingsResponse(
+            settings=updated_settings,
+            status="success"
+        )
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error updating settings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error updating settings")
+    except Exception as e:
+        logger.error(f"Unexpected error updating settings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error updating settings")
+
+
+# ============================================================================
+# Scraper Target Management Endpoints
+# ============================================================================
+
+@app.get("/api/v1/scraper/targets", response_model=schemas.ScraperTargetsResponse)
+async def get_scraper_targets(
+    active_only: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all scraper targets or only active ones.
+    
+    Args:
+        active_only: If True, return only active targets
+        db: Database session dependency
+        
+    Returns:
+        ScraperTargetsResponse with list of targets
+    """
+    try:
+        if active_only:
+            targets = crud.get_active_scraper_targets(db)
+            logger.info(f"Retrieved {len(targets)} active scraper targets")
+        else:
+            targets = crud.get_all_scraper_targets(db)
+            logger.info(f"Retrieved {len(targets)} scraper targets")
+        
+        return schemas.ScraperTargetsResponse(
+            targets=[schemas.ScraperTarget.model_validate(t) for t in targets],
+            total_count=len(targets),
+            status="success"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching scraper targets: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching scraper targets")
+
+
+@app.post("/api/v1/scraper/targets", response_model=schemas.ScraperTarget)
+async def create_scraper_target_endpoint(
+    target: schemas.ScraperTargetCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new scraper target.
+    
+    Args:
+        target: Scraper target creation data
+        db: Database session dependency
+        
+    Returns:
+        Created scraper target
+    """
+    try:
+        db_target = crud.create_scraper_target(db, target)
+        logger.info(f"Created new scraper target: {db_target.name}")
+        
+        return schemas.ScraperTarget.model_validate(db_target)
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error creating scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error creating scraper target")
+    except Exception as e:
+        logger.error(f"Unexpected error creating scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error creating scraper target")
+
+
+@app.put("/api/v1/scraper/targets/{target_id}", response_model=schemas.ScraperTarget)
+async def update_scraper_target_endpoint(
+    target_id: int,
+    target_update: schemas.ScraperTargetUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update a scraper target.
+    
+    Args:
+        target_id: ID of target to update
+        target_update: Update data
+        db: Database session dependency
+        
+    Returns:
+        Updated scraper target
+    """
+    try:
+        db_target = crud.update_scraper_target(db, target_id, target_update)
+        
+        if not db_target:
+            raise HTTPException(status_code=404, detail="Scraper target not found")
+        
+        logger.info(f"Updated scraper target {target_id}: {db_target.name}")
+        
+        return schemas.ScraperTarget.model_validate(db_target)
+        
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error updating scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error updating scraper target")
+    except Exception as e:
+        logger.error(f"Unexpected error updating scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error updating scraper target")
+
+
+@app.delete("/api/v1/scraper/targets/{target_id}")
+async def delete_scraper_target_endpoint(
+    target_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a scraper target.
+    
+    Args:
+        target_id: ID of target to delete
+        db: Database session dependency
+        
+    Returns:
+        Success message
+    """
+    try:
+        success = crud.delete_scraper_target(db, target_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Scraper target not found")
+        
+        logger.info(f"Deleted scraper target {target_id}")
+        
+        return {"message": "Scraper target deleted successfully", "status": "success"}
+        
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error deleting scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error deleting scraper target")
+    except Exception as e:
+        logger.error(f"Unexpected error deleting scraper target: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error deleting scraper target")
+
+
+# ============================================================================
+# Scraper Control Endpoints
+# ============================================================================
+
+@app.post("/api/v1/scraper/run")
+async def trigger_scraper():
+    """
+    Trigger the scraper to run immediately.
+    
+    This endpoint starts the scraper process in the background using Docker Compose.
+    
+    Returns:
+        Success message with scraper status
+    """
+    try:
+        logger.info("Triggering scraper run...")
+        
+        # Start scraper in background
+        process = subprocess.Popen(
+            ["docker-compose", "exec", "-T", "scraper", "python", "scraper.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        logger.info(f"Scraper process started with PID: {process.pid}")
+        
+        return {
+            "message": "Scraper triggered successfully",
+            "status": "running",
+            "process_id": process.pid
+        }
+        
+    except Exception as e:
+        logger.error(f"Error triggering scraper: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
+
+
+# ============================================================================
+# Socket.IO Event Handlers
+# ============================================================================
+
+@sio.event
+async def connect(sid, environ):
+    """Handle client connection"""
+    logger.info(f"Client connected: {sid}")
+
+
+@sio.event
+async def disconnect(sid):
+    """Handle client disconnection"""
+    logger.info(f"Client disconnected: {sid}")
+
+
+async def emit_new_surebets(surebets: List[schemas.SurebetEvent]):
+    """
+    Emit new surebets to all connected Socket.IO clients.
+    
+    Args:
+        surebets: List of surebet events to broadcast
+    """
+    try:
+        # Convert Pydantic models to dictionaries for JSON serialization
+        surebets_data = [s.model_dump() for s in surebets]
+        
+        from datetime import datetime
+        
+        await sio.emit('new_surebets', {
+            'surebets': surebets_data,
+            'total_count': len(surebets_data),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        logger.info(f"Emitted {len(surebets)} surebets to all clients")
+        
+    except Exception as e:
+        logger.error(f"Error emitting surebets: {str(e)}")
 
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Surebet Tool API...")
-    print("📊 Database initialized and ready")
-    print("🌐 API docs available at: http://localhost:8000/docs")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info("🚀 Starting Surebet Tool API with WebSocket support...")
+    logger.info("📊 Database initialized and ready")
+    logger.info("🌐 API docs available at: http://localhost:8000/docs")
+    logger.info("🔌 WebSocket server ready for real-time updates")
+    uvicorn.run(socket_app, host="0.0.0.0", port=8000)

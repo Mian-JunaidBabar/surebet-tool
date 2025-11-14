@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -47,3 +47,37 @@ class Outcome(Base):
 
     def __repr__(self):
         return f"<Outcome(id={self.id}, bookmaker='{self.bookmaker}', name='{self.name}', odds={self.odds})>"
+
+
+class Setting(Base):
+    """
+    SQLAlchemy model for application settings.
+    
+    This is a simple key-value store for application configuration.
+    Settings can be updated dynamically through the API.
+    """
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True, index=True)  # Setting key (e.g., "refresh_interval")
+    value = Column(String, nullable=False)  # Setting value stored as string
+
+    def __repr__(self):
+        return f"<Setting(key='{self.key}', value='{self.value}')>"
+
+
+class ScraperTarget(Base):
+    """
+    SQLAlchemy model for scraper targets.
+    
+    This table stores the list of websites/URLs that the scraper should monitor.
+    Each target can be enabled/disabled dynamically.
+    """
+    __tablename__ = "scraper_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)  # Target name (e.g., "BetExplorer Premier League")
+    url = Column(String, nullable=False)  # Target URL to scrape
+    is_active = Column(Boolean, default=True, nullable=False)  # Whether this target is currently active
+
+    def __repr__(self):
+        return f"<ScraperTarget(id={self.id}, name='{self.name}', is_active={self.is_active})>"

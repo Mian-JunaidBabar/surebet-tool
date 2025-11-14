@@ -63,3 +63,70 @@ class SurebetsResponse(BaseModel):
     surebets: List[SurebetEvent]
     total_count: int
     status: str
+
+
+# Settings Schemas
+class SettingBase(BaseModel):
+    """Base schema for settings"""
+    key: str
+    value: str
+
+
+class SettingCreate(SettingBase):
+    """Schema for creating settings"""
+    pass
+
+
+class SettingUpdate(BaseModel):
+    """Schema for updating settings"""
+    value: str
+
+
+class Setting(SettingBase):
+    """Schema for setting responses"""
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SettingsUpdate(BaseModel):
+    """Schema for bulk settings update"""
+    settings: dict[str, str]
+
+
+class SettingsResponse(BaseModel):
+    """Schema for settings endpoint response"""
+    settings: dict[str, str]
+    status: str
+
+
+# Scraper Target Schemas
+class ScraperTargetBase(BaseModel):
+    """Base schema for scraper targets"""
+    name: str
+    url: str
+    is_active: bool = True
+
+
+class ScraperTargetCreate(ScraperTargetBase):
+    """Schema for creating scraper targets"""
+    pass
+
+
+class ScraperTargetUpdate(BaseModel):
+    """Schema for updating scraper targets"""
+    name: Optional[str] = None
+    url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ScraperTarget(ScraperTargetBase):
+    """Schema for scraper target responses"""
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ScraperTargetsResponse(BaseModel):
+    """Schema for scraper targets endpoint response"""
+    targets: List[ScraperTarget]
+    total_count: int
+    status: str
