@@ -419,7 +419,8 @@ def fetch_scraper_targets() -> List[Dict[str, Any]]:
         response.raise_for_status()
         
         data = response.json()
-        targets = data.get("data", [])
+        # Backend returns {"targets": [...], "total_count": N, "status": "success"}
+        targets = data.get("targets", [])
         
         logger.info(f"✅ Fetched {len(targets)} active targets")
         return targets

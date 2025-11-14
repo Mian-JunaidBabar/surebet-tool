@@ -38,37 +38,12 @@ try:
             # BetExplorer targets
             models.ScraperTarget(
                 name="BetExplorer Football",
-                url="https://www.betexplorer.com/",
+                url="https://www.betexplorer.com/football/",
                 is_active=True
             ),
             models.ScraperTarget(
                 name="BetExplorer Basketball",
                 url="https://www.betexplorer.com/basketball/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Hockey",
-                url="https://www.betexplorer.com/hockey/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Tennis",
-                url="https://www.betexplorer.com/tennis/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Baseball",
-                url="https://www.betexplorer.com/baseball/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Volleyball",
-                url="https://www.betexplorer.com/volleyball/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Handball",
-                url="https://www.betexplorer.com/handball/",
                 is_active=True
             ),
             # Oddschecker targets
@@ -87,7 +62,22 @@ try:
                 url="https://www.oddschecker.com/horse-racing",
                 is_active=True
             ),
-            # Oddsportal targets
+            models.ScraperTarget(
+                name="Oddschecker Golf",
+                url="https://www.oddschecker.com/golf",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="Oddschecker Boxing",
+                url="https://www.oddschecker.com/boxing",
+                is_active=True
+            ),
+            models.ScraperTarget(
+                name="Oddschecker Cricket",
+                url="https://www.oddschecker.com/cricket",
+                is_active=True
+            ),
+            # Oddsportal target
             models.ScraperTarget(
                 name="Oddsportal Homepage",
                 url="https://www.oddsportal.com/",
@@ -605,6 +595,82 @@ async def trigger_scraper():
     except Exception as e:
         logger.error(f"Error triggering scraper: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
+
+
+@app.get("/api/v1/run-full-test")
+async def run_full_end_to_end_test(db: Session = Depends(get_db)):
+    """
+    End-to-end testing endpoint.
+    
+    This endpoint:
+    1. Triggers the scraper
+    2. Waits 60 seconds for scraping to complete
+    3. Checks the database for scraped events
+    4. Returns a summary
+    
+    Returns:
+        Test summary with event count
+    """
+    import time as time_module
+    
+    logger.info("=" * 60)
+    logger.info("--- STARTING END-TO-END TEST ---")
+    logger.info("=" * 60)
+    
+    try:
+        # Step 1: Trigger the scraper
+        logger.info("Step 1: Triggering scraper...")
+        scraper_url = "http://scraper:8001/run-scrape"
+        
+        try:
+            response = requests.post(scraper_url, timeout=5)
+            response.raise_for_status()
+            logger.info(f"✅ Scraper triggered successfully: {response.json()}")
+        except Exception as trigger_error:
+            logger.error(f"❌ Failed to trigger scraper: {str(trigger_error)}")
+            return {
+                "status": "error",
+                "message": f"Failed to trigger scraper: {str(trigger_error)}",
+                "events_count": 0
+            }
+        
+        # Step 2: Wait for scraping to complete
+        wait_seconds = 60
+        logger.info(f"Step 2: Waiting {wait_seconds} seconds for scraping to complete...")
+        time_module.sleep(wait_seconds)
+        logger.info("✅ Wait complete")
+        
+        # Step 3: Query the database for events
+        logger.info("Step 3: Querying database for scraped events...")
+        events = crud.get_all_events(db)
+        event_count = len(events)
+        logger.info(f"✅ Found {event_count} events in database")
+        
+        # Step 4: Query scraper targets
+        targets = crud.get_all_scraper_targets(db)
+        target_count = len(targets)
+        logger.info(f"✅ Found {target_count} scraper targets configured")
+        
+        logger.info("=" * 60)
+        logger.info("--- END-TO-END TEST COMPLETE ---")
+        logger.info("=" * 60)
+        
+        return {
+            "status": "success",
+            "message": f"Test complete. Scraper was triggered. The database now contains {event_count} events.",
+            "events_count": event_count,
+            "targets_count": target_count,
+            "wait_time_seconds": wait_seconds,
+            "timestamp": time_module.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error during end-to-end test: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error during test: {str(e)}",
+            "events_count": 0
+        }
 
 
 # ============================================================================
