@@ -8,6 +8,10 @@ import socketio
 import logging
 import requests
 
+# Import our new modules for The Odds API
+import odds_api_service
+import data_transformer
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -375,6 +379,181 @@ async def get_surebets(db: Session = Depends(get_db)):
 
 
 # ============================================================================
+# The Odds API Endpoint - Production-Ready Integration
+# ============================================================================
+
+@app.post("/api/v1/odds/fetch")
+async def fetch_odds_from_api(db: Session = Depends(get_db)):
+    """
+    Fetch live odds from The Odds API, transform, store, and detect surebets.
+    
+    This is the main orchestration endpoint that:
+    1. Calls The Odds API to fetch live betting odds
+    2. Extracts API usage information from response headers
+    3. Transforms the API data to our internal schema
+    4. Saves the data to the database (upserts events)
+    5. Calculates surebet opportunities
+    6. Emits surebets via WebSocket for real-time updates
+    7. Returns both surebets and API usage information
+    
+    Returns:
+        JSON response with surebets and API usage data:
+        {
+            "surebets": [...],
+            "usage": {
+                "used": "123",
+                "remaining": "377"
+            },
+            "status": "success",
+            "events_processed": 50
+        }
+    
+    Raises:
+        HTTPException: If API call fails or processing encounters errors
+    """
+    try:
+        # Step A: Call The Odds API to fetch live odds
+        logger.info("🎯 Initiating fetch from The Odds API...")
+        response = odds_api_service.fetch_live_odds()
+        
+        # Step B: Extract usage information from response headers
+        used = response.headers.get('x-requests-used', '0')
+        remaining = response.headers.get('x-requests-remaining', '0')
+        
+        logger.info(f"📊 API Usage - Used: {used}, Remaining: {remaining}")
+        
+        # Get the JSON data from the response
+        api_data = response.json()
+        
+        if not api_data:
+            logger.warning("⚠️  No events returned from The Odds API")
+            return {
+                "surebets": [],
+                "usage": {"used": used, "remaining": remaining},
+                "status": "success",
+                "events_processed": 0,
+                "message": "No events available from The Odds API"
+            }
+        
+        # Step C: Transform the API data to our internal schema
+        logger.info(f"🔄 Transforming {len(api_data)} events...")
+        transformed_events = data_transformer.transform_odds_api_data(api_data)
+        
+        # Step D: Save events to database using upsert
+        logger.info(f"💾 Saving {len(transformed_events)} events to database...")
+        events_processed = 0
+        
+        for event_data in transformed_events:
+            try:
+                # Use upsert to either create or update the event
+                crud.upsert_event(db, event_data)
+                events_processed += 1
+            except Exception as e:
+                logger.error(f"❌ Error upserting event {event_data.event_id}: {str(e)}")
+                # Continue processing other events
+                continue
+        
+        db.commit()
+        logger.info(f"✅ Successfully saved {events_processed} events to database")
+        
+        # Step E: Calculate surebet opportunities
+        logger.info("🔍 Calculating surebet opportunities...")
+        events = crud.get_events_with_multiple_outcomes(db)
+        
+        calculated_surebets = []
+        
+        for event in events:
+            is_surebet, profit_percentage, total_inverse_odds = calculate_surebet_profit(event.outcomes)
+            
+            if is_surebet:
+                surebet_event = schemas.SurebetEvent(
+                    id=event.id,
+                    event_id=event.event_id,
+                    event=event.event,
+                    sport=event.sport,
+                    outcomes=[
+                        schemas.Outcome(
+                            id=outcome.id,
+                            event_id=outcome.event_id,
+                            bookmaker=outcome.bookmaker,
+                            name=outcome.name,
+                            odds=outcome.odds,
+                            deep_link_url=outcome.deep_link_url
+                        )
+                        for outcome in event.outcomes
+                    ],
+                    profit_percentage=profit_percentage,
+                    total_inverse_odds=total_inverse_odds
+                )
+                calculated_surebets.append(surebet_event)
+        
+        # Sort by profit percentage (highest first)
+        calculated_surebets.sort(key=lambda x: x.profit_percentage, reverse=True)
+        
+        logger.info(f"🎯 Found {len(calculated_surebets)} surebet opportunities!")
+        
+        # Emit surebets via WebSocket for real-time frontend updates
+        if calculated_surebets:
+            try:
+                # Convert to dict for WebSocket emission
+                surebets_data = [
+                    {
+                        "id": sb.id,
+                        "event_id": sb.event_id,
+                        "event": sb.event,
+                        "sport": sb.sport,
+                        "profit_percentage": sb.profit_percentage,
+                        "outcomes": [
+                            {
+                                "bookmaker": outcome.bookmaker,
+                                "name": outcome.name,
+                                "odds": outcome.odds,
+                                "deep_link_url": outcome.deep_link_url
+                            }
+                            for outcome in sb.outcomes
+                        ]
+                    }
+                    for sb in calculated_surebets
+                ]
+                
+                # Emit the 'new_surebets' event to all connected clients
+                await sio.emit('new_surebets', surebets_data)
+                logger.info(f"📡 Emitted {len(calculated_surebets)} surebets via WebSocket")
+            except Exception as e:
+                logger.error(f"❌ Error emitting surebets via WebSocket: {str(e)}")
+                # Don't fail the request if WebSocket emission fails
+        
+        # Step F: Return response with surebets and API usage
+        return {
+            "surebets": calculated_surebets,
+            "usage": {
+                "used": used,
+                "remaining": remaining
+            },
+            "status": "success",
+            "events_processed": events_processed,
+            "total_surebets": len(calculated_surebets)
+        }
+        
+    except ValueError as e:
+        # API key not configured
+        logger.error(f"❌ Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except requests.exceptions.RequestException as e:
+        # API request failed
+        logger.error(f"❌ The Odds API request failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Failed to fetch data from The Odds API")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"❌ Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while processing odds data")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# ============================================================================
 # Settings Endpoints
 # ============================================================================
 
@@ -621,6 +800,61 @@ async def trigger_scraper():
     except Exception as e:
         logger.error(f"Error triggering scraper: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
+
+
+@app.post("/api/v1/scraper/run-stealth")
+async def trigger_stealth_scraper():
+    """
+    Trigger the STEALTH scraper to run with advanced anti-detection measures.
+
+    This endpoint uses:
+    - Playwright-stealth to bypass bot detection
+    - Residential proxy support (configure PROXY_URL in .env)
+    - Human-like behavior simulation (mouse movements, scrolling, delays)
+    - Resilient selectors (role-based and text-based queries)
+
+    The stealth scraper is designed to bypass Cloudflare and other
+    anti-bot protections that block the regular scraper.
+
+    Returns:
+        Success message with stealth scraper status and features
+    """
+    try:
+        logger.info("🕵️  Triggering STEALTH scraper run...")
+
+        # Make POST request to stealth scraper endpoint
+        scraper_url = "http://scraper:8001/run-stealth-scrape"
+        
+        response = requests.post(
+            scraper_url,
+            timeout=5  # Short timeout since scraper runs in background
+        )
+
+        if response.status_code == 200:
+            logger.info("✅ Stealth scraper triggered successfully")
+            return response.json()
+        else:
+            logger.error(f"❌ Stealth scraper service returned error: {response.status_code}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Stealth scraper service error: {response.text}"
+            )
+
+    except requests.exceptions.ConnectionError:
+        logger.error("❌ Could not connect to stealth scraper service")
+        raise HTTPException(
+            status_code=503,
+            detail="Stealth scraper service is not available"
+        )
+    except requests.exceptions.Timeout:
+        logger.error("❌ Request to stealth scraper service timed out")
+        raise HTTPException(
+            status_code=504,
+            detail="Stealth scraper service timed out"
+        )
+    except Exception as e:
+        logger.error(f"❌ Error triggering stealth scraper: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error triggering stealth scraper: {str(e)}")
 
 
 @app.post("/api/v1/scraper/test-target")

@@ -1,2 +1,6 @@
 extras
 extras/*
+
+# Environment variables - DO NOT COMMIT
+**/.env
+.env

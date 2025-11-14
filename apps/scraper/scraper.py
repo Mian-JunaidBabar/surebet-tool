@@ -49,6 +49,9 @@ from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin
 from pydantic import BaseModel
 
+# Import the stealth scraper service
+import stealth_scraper_service
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -930,6 +933,61 @@ async def trigger_scrape(background_tasks: BackgroundTasks):
         "message": "Scraping job started in background",
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
+
+
+@app.post("/run-stealth-scrape")
+async def trigger_stealth_scrape(background_tasks: BackgroundTasks):
+    """
+    Trigger a STEALTH scraping job using playwright-stealth and proxies.
+    
+    This endpoint uses advanced anti-detection techniques:
+    - Playwright-stealth patches to avoid bot detection
+    - Proxy support for IP rotation (configure PROXY_URL in .env)
+    - Human-like behavior simulation (mouse movements, random delays)
+    - Resilient selectors (role-based and text-based queries)
+    
+    The scraping runs in the background, so this endpoint returns immediately.
+    Results are automatically sent to the backend for processing.
+    """
+    logger.info("🕵️  Received STEALTH scrape trigger request")
+    
+    # Add the stealth scraping task to background tasks
+    background_tasks.add_task(run_stealth_scrape_task)
+    
+    return {
+        "status": "accepted",
+        "message": "Stealth scraping job started in background with anti-detection measures",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "features": [
+            "Playwright-stealth enabled",
+            "Human behavior simulation",
+            "Proxy support (if configured)",
+            "Resilient selectors"
+        ]
+    }
+
+
+def run_stealth_scrape_task():
+    """
+    Background task that runs the stealth scraper and sends results to backend.
+    """
+    try:
+        logger.info("🚀 Starting stealth scraping task...")
+        
+        # Run the stealth scraper
+        events = stealth_scraper_service.run_stealth_scrape()
+        
+        logger.info(f"✅ Stealth scraper extracted {len(events)} events")
+        
+        # Send the scraped data to the backend
+        if events:
+            send_data_to_backend(events)
+        else:
+            logger.warning("⚠️  No events extracted by stealth scraper")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in stealth scraping task: {str(e)}")
+        logger.exception(e)
 
 
 @app.get("/generate-mock-data")

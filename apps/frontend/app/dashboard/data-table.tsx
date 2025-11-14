@@ -99,10 +99,10 @@ export function DataTable<TData, TValue>({
     if (minProfit || maxProfit) {
       const min = minProfit ? parseFloat(minProfit) : 0;
       const max = maxProfit ? parseFloat(maxProfit) : Infinity;
-      table.getColumn("profit")?.setFilterValue([min, max]);
-      filters.push({ id: "profit", value: [min, max] });
+      table.getColumn("profit_percentage")?.setFilterValue([min, max]);
+      filters.push({ id: "profit_percentage", value: [min, max] });
     } else {
-      table.getColumn("profit")?.setFilterValue(undefined);
+      table.getColumn("profit_percentage")?.setFilterValue(undefined);
     }
 
     // Bookmaker filter ("all" means no filter)

@@ -24,6 +24,8 @@ services:
       - ./apps/backend:/app
       # The named volume where the SQLite database will be stored safely
       - sqlite_data:/app/data
+    env_file:
+      - ./apps/backend/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 10s
@@ -39,6 +41,8 @@ services:
     volumes:
       # Syncs your local code into the container
       - ./apps/scraper:/app
+    env_file:
+      - ./apps/backend/.env
     depends_on:
       backend:
         condition: service_healthy
