@@ -7,7 +7,8 @@ import os
 os.makedirs("/app/data", exist_ok=True)
 
 # Database URL - SQLite database stored in /app/data/surebets.db
-SQLALCHEMY_DATABASE_URL = "sqlite:///app/data/surebets.db"
+# Note: For absolute paths in SQLite, use four slashes: sqlite:////absolute/path
+SQLALCHEMY_DATABASE_URL = "sqlite:////app/data/surebets.db"
 
 # Create SQLAlchemy engine
 # connect_args={"check_same_thread": False} is needed for SQLite

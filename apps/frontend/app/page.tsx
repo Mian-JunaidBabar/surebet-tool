@@ -1,19 +1,12 @@
-import {
-  ArrowRight,
-  Shield,
-  TrendingUp,
-  Zap,
-  Search,
-  Calculator,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, Shield, TrendingUp, Zap, Search, Calculator, ShieldCheck, } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
+
 export default function Home() {
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden min-h-screen bg-background/50">
       {/* Hero with vibrant gradient */}
       <div className="absolute inset-0 -z-10 bg-linear-to-br from-primary/20 via-secondary/10 to-accent/20" />
       <section className="container mx-auto px-4 pt-20 pb-12">
