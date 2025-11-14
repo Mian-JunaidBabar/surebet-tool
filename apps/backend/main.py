@@ -23,6 +23,38 @@ from database import SessionLocal, engine, get_db
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
+# Database seeding - Add default scraper target if none exist
+logger.info("🌱 Checking for default data...")
+db = SessionLocal()
+try:
+    # Check if any scraper targets exist
+    existing_targets = db.query(models.ScraperTarget).first()
+    
+    if existing_targets is None:
+        logger.info("📍 No scraper targets found. Creating default target...")
+        
+        # Create default scraper target
+        default_target = models.ScraperTarget(
+            name="BetExplorer Premier League",
+            url="https://www.betexplorer.com/football/england/premier-league/",
+            is_active=True
+        )
+        
+        db.add(default_target)
+        db.commit()
+        db.refresh(default_target)
+        
+        logger.info(f"✅ Created default scraper target: {default_target.name}")
+    else:
+        logger.info("✅ Scraper targets already exist, skipping seeding")
+        
+except Exception as e:
+    logger.error(f"❌ Error during database seeding: {str(e)}")
+    db.rollback()
+finally:
+    db.close()
+    logger.info("🌱 Database seeding check complete")
+
 # Initialize Socket.IO server
 sio = socketio.AsyncServer(
     async_mode='asgi',

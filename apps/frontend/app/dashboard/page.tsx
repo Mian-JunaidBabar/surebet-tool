@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
 import { RefreshButton } from "@/components/refresh-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -45,6 +47,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   const fetchSurebets = async () => {
     try {
@@ -73,10 +76,84 @@ export default function DashboardPage() {
     }
   };
 
+  // Trigger scraper run via API
+  const triggerScraper = async () => {
+    try {
+      toast.info("Triggering scraper run...");
+
+      const response = await fetch("http://localhost:8000/api/v1/scraper/run", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("✅ Scraper triggered successfully:", data);
+      toast.success(
+        "Scraper run triggered successfully! Data will update automatically."
+      );
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to trigger scraper";
+      console.error("❌ Error triggering scraper:", errorMessage);
+      toast.error(`Failed to trigger scraper: ${errorMessage}`);
+    }
+  };
+
   // Fetch data on component mount
   useEffect(() => {
     fetchSurebets();
   }, []);
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    console.log("🔌 Initializing WebSocket connection...");
+
+    // Create socket connection
+    const socket: Socket = io("http://localhost:8000", {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    // Connection event handlers
+    socket.on("connect", () => {
+      console.log("✅ WebSocket connected successfully");
+      setIsConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("⚠️  WebSocket disconnected");
+      setIsConnected(false);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("❌ WebSocket connection error:", error);
+      setIsConnected(false);
+    });
+
+    // Listen for new surebet updates from backend
+    socket.on("new_surebets", (data: SurebetsResponse) => {
+      console.log("📡 Received new surebets via WebSocket:", data);
+
+      if (data && data.surebets) {
+        setSurebets(data.surebets);
+        setLastRefresh(new Date());
+        console.log(
+          `🔄 Updated dashboard with ${data.surebets.length} surebets`
+        );
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      console.log("🔌 Disconnecting WebSocket...");
+      socket.disconnect();
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   // Derive aggregate stats from live data
   const totalBets = surebets.length;
@@ -106,11 +183,17 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <RefreshButton onClick={fetchSurebets} />
+            <RefreshButton onClick={triggerScraper} />
             {lastRefresh && (
               <span className="text-sm text-muted-foreground">
                 Last updated: {lastRefresh.toLocaleTimeString()}
               </span>
+            )}
+            {isConnected && (
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-xs text-muted-foreground">Live</span>
+              </div>
             )}
           </div>
         </div>
