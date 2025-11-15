@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
+import React from "react";
 
 // Updated TypeScript types matching backend SurebetEvent schema
 export type SurebetEvent = {
@@ -120,23 +121,65 @@ export const columns: ColumnDef<SurebetEvent>[] = [
     header: "Actions",
     cell: ({ row }: { row: any }) => {
       const surebet = row.original as SurebetEvent;
-      const firstOutcome = surebet.outcomes[0];
+      const outcomes = (surebet.outcomes || []) as SurebetEvent["outcomes"];
+
+      // Pick the best odds per outcome name (e.g., Home/Draw/Away)
+      const bestByOutcomeName = outcomes.reduce(
+        (acc: Record<string, (typeof outcomes)[number]>, curr) => {
+          const key = curr.name || "";
+          if (!key) return acc;
+          if (!acc[key] || curr.odds > acc[key].odds) {
+            acc[key] = curr;
+          }
+          return acc;
+        },
+        {}
+      );
+      const bestOutcomes = Object.values(bestByOutcomeName);
+
+      // Helper to ensure external URL is valid
+      const toExternalUrl = (url?: string) => {
+        if (!url) return undefined;
+        try {
+          // If it's relative, let URL throw and we ignore
+          const u = new URL(url);
+          return u.href;
+        } catch {
+          return undefined;
+        }
+      };
+
+      // Collect best links (open up to 3 in new tabs)
+      const bestLinks = bestOutcomes
+        .map((o) => toExternalUrl(o.deep_link_url))
+        .filter((u): u is string => Boolean(u));
+
+      const handleOpenBestLinks = (e: React.MouseEvent) => {
+        e.preventDefault();
+        // Open the best bookmaker pages for each outcome needed for the arb
+        // Limit to 3 new tabs to avoid browser blocking
+        bestLinks.slice(0, 3).forEach((href) => {
+          window.open(href, "_blank", "noopener,noreferrer");
+        });
+      };
 
       return (
         <div className="flex items-center gap-2">
-          {/* Go to Bet Button */}
-          {firstOutcome && firstOutcome.deep_link_url && (
-            <Link
-              href={firstOutcome.deep_link_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex"
+          {/* Go to Bets: open the top bookmaker pages for each outcome */}
+          {bestLinks.length > 0 && (
+            <Button
+              onClick={handleOpenBestLinks}
+              variant="default"
+              size="sm"
+              className="gap-2"
+              title={`Opens ${Math.min(
+                bestLinks.length,
+                3
+              )} tab(s) with the best bookmaker pages`}
             >
-              <Button variant="default" size="sm" className="gap-2">
-                <ExternalLink className="h-4 w-4" />
-                Go to Bet
-              </Button>
-            </Link>
+              <ExternalLink className="h-4 w-4" />
+              Go to Bets
+            </Button>
           )}
 
           {/* Additional Actions Menu */}
@@ -160,17 +203,24 @@ export const columns: ColumnDef<SurebetEvent>[] = [
               >
                 Calculate Stakes
               </DropdownMenuItem>
-              {surebet.outcomes.map((outcome) => (
+              {outcomes.map((outcome) => (
                 <DropdownMenuItem key={outcome.id} asChild>
-                  <Link
-                    href={outcome.deep_link_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {outcome.bookmaker} - {outcome.name}
-                  </Link>
+                  {toExternalUrl(outcome.deep_link_url) ? (
+                    <Link
+                      href={outcome.deep_link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {outcome.bookmaker} - {outcome.name}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-2 opacity-60 cursor-not-allowed">
+                      <ExternalLink className="h-3 w-3" />
+                      {outcome.bookmaker} - {outcome.name}
+                    </span>
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
