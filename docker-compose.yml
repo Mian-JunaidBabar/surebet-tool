@@ -10,6 +10,8 @@ services:
       - ./apps/frontend:/app
       # This prevents your local node_modules from overwriting the container's
       - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     # The 'npm run dev' command keeps this service running,
     # so stdin_open and tty are not needed.
 

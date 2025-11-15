@@ -11,7 +11,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 // Updated TypeScript types matching backend SurebetEvent schema
 export type SurebetEvent = {
@@ -214,6 +227,8 @@ export const columns: ColumnDef<SurebetEvent>[] = [
         .map((o) => toExternalUrl(o.deep_link_url))
         .filter((u): u is string => Boolean(u));
 
+      const [sheetOpen, setSheetOpen] = useState(false);
+
       const handleOpenBestLinks = (e: React.MouseEvent) => {
         e.preventDefault();
         // Open the best bookmaker pages for each outcome needed for the arb
@@ -252,17 +267,38 @@ export const columns: ColumnDef<SurebetEvent>[] = [
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/bet/${surebet.event_id}`} className="w-full">
+                <Link
+                  href={`/bet/${encodeURIComponent(surebet.event_id)}`}
+                  className="w-full"
+                >
                   View Details
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  console.log("Calculate stakes:", surebet.event_id)
-                }
-              >
+              {/* Controlled Sheet so it works inside DropdownMenu */}
+              <DropdownMenuItem onClick={() => setSheetOpen(true)}>
                 Calculate Stakes
               </DropdownMenuItem>
+              <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+                <SheetContent side="right">
+                  <SheetHeader>
+                    <SheetTitle>Calculate Stakes</SheetTitle>
+                    <SheetDescription>
+                      Allocate a stake amount across the best odds to ensure a
+                      consistent return.
+                    </SheetDescription>
+                  </SheetHeader>
+
+                  <div className="p-4">
+                    <CalculateStakesForm outcomes={bestOutcomes} />
+                  </div>
+
+                  <SheetFooter>
+                    <SheetClose>
+                      <Button variant="outline">Close</Button>
+                    </SheetClose>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
               {outcomes.map((outcome) => (
                 <DropdownMenuItem key={outcome.id} asChild>
                   {toExternalUrl(outcome.deep_link_url) ? (
@@ -289,4 +325,92 @@ export const columns: ColumnDef<SurebetEvent>[] = [
       );
     },
   },
+  {
+    // Placeholder: this isn't a real column, but it's exported so TS won't complain when used below.
+    accessorKey: "__internal__calculate_stakes_placeholder",
+    header: () => null,
+    cell: () => null,
+  },
 ];
+
+function CalculateStakesForm({
+  outcomes,
+}: {
+  outcomes: SurebetEvent["outcomes"];
+}) {
+  const [stake, setStake] = useState<number>(100);
+
+  const sumInverse = outcomes.reduce((acc, o) => acc + 1 / o.odds, 0);
+  if (!outcomes || outcomes.length === 0) {
+    return <div className="text-sm">No outcomes available</div>;
+  }
+  if (sumInverse <= 0) {
+    return (
+      <div className="text-sm text-amber-600">
+        Unable to calculate stakes: invalid odds or division by zero
+      </div>
+    );
+  }
+
+  const results = outcomes.map((o) => {
+    const share = 1 / o.odds / sumInverse;
+    const stakeForOutcome = stake * share;
+    const potentialReturn = stakeForOutcome * o.odds;
+    return {
+      ...o,
+      stake: stakeForOutcome,
+      return: potentialReturn,
+    };
+  });
+
+  const guaranteedReturn = stake / sumInverse;
+  const profit = guaranteedReturn - stake;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-2">
+        <Label>Stake Amount (Total)</Label>
+        <Input
+          type="number"
+          min={1}
+          value={stake}
+          onChange={(e) => setStake(Number(e.target.value))}
+        />
+      </div>
+
+      <div className="text-sm">
+        <div>
+          Expected return: <b>{guaranteedReturn?.toFixed(2)}</b>
+        </div>
+        <div>
+          Profit: <b>{profit?.toFixed(2)}</b>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {results.map((r) => (
+          <div
+            key={r.id}
+            className={cn(
+              "p-2 border rounded flex justify-between items-center",
+              "text-sm"
+            )}
+          >
+            <div>
+              <div className="font-medium">{r.bookmaker}</div>
+              <div className="text-muted-foreground">
+                {r.name} @ {r.odds.toFixed(2)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-semibold">{r.stake.toFixed(2)}</div>
+              <div className="text-muted-foreground">
+                Return {r.return.toFixed(2)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

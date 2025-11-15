@@ -350,7 +350,20 @@ async def get_surebet_detail(event_id: str, db: Session = Depends(get_db)):
     SurebetEvent payload. Returns 404 if not found or not a surebet.
     """
     try:
+        # Try exact match first
         event = crud.get_event_by_event_id(db, event_id)
+        
+        # If not found, try slugifying the event_id (for cases where frontend encodes raw event name)
+        if not event:
+            import re
+            base = event_id.strip().lower()
+            base = re.sub(r"\bvs\b", "-", base)
+            base = re.sub(r"\s+", "-", base)
+            base = re.sub(r"[^a-z0-9-]", "", base)
+            base = re.sub(r"-+", "-", base).strip("-")
+            slugified = base or "event"
+            event = crud.get_event_by_event_id(db, slugified)
+        
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
@@ -396,7 +409,29 @@ async def get_event_detail(event_id: str, db: Session = Depends(get_db)):
     disappeared but the event and outcomes were recently saved.
     """
     try:
+        # Try exact match first
         event = crud.get_event_by_event_id(db, event_id)
+        
+        # If not found, try slugifying the event_id
+        if not event:
+            import re
+            base = event_id.strip().lower()
+            base = re.sub(r"\bvs\b", "-", base)
+            base = re.sub(r"\s+", "-", base)
+            base = re.sub(r"[^a-z0-9-]", "", base)
+            base = re.sub(r"-+", "-", base).strip("-")
+            slugified = base or "event"
+            event = crud.get_event_by_event_id(db, slugified)
+        
+        # If still not found, try decoding and then matching by raw event name
+        if not event:
+            from urllib.parse import unquote
+            decoded = unquote(event_id)
+            event = db.query(models.Event).filter(models.Event.event == decoded).first()
+            if not event:
+                # Try a case-insensitive contains search as a last resort
+                event = db.query(models.Event).filter(models.Event.event.ilike(f"%{decoded}%")).first()
+
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
