@@ -4,3 +4,7 @@ extras/*
 # Environment variables - DO NOT COMMIT
 **/.env
 .env
+
+/Docs
+
+__pycache__/
