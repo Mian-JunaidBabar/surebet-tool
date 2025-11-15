@@ -56,19 +56,21 @@ export const columns: ColumnDef<SurebetEvent>[] = [
       const event = row.getValue("event") as string;
       const sport = row.original.sport;
 
-      // Truncate long event names to prevent UI breaks
-      const maxLength = 80;
+      // Aggressively truncate event names to prevent table overflow
+      const maxLength = 45;
       const displayEvent =
         event.length > maxLength
           ? event.substring(0, maxLength) + "..."
           : event;
 
       return (
-        <div className="flex flex-col">
-          <span className="font-medium" title={event}>
+        <div className="flex flex-col max-w-[200px]">
+          <span className="font-medium truncate" title={event}>
             {displayEvent}
           </span>
-          <span className="text-sm text-muted-foreground">{sport}</span>
+          <span className="text-xs text-muted-foreground truncate">
+            {sport}
+          </span>
         </div>
       );
     },
@@ -86,18 +88,61 @@ export const columns: ColumnDef<SurebetEvent>[] = [
     header: "Bets",
     cell: ({ row }: { row: any }) => {
       const outcomes = row.getValue("outcomes") as SurebetEvent["outcomes"];
+
+      // Group outcomes by name (e.g., "Home Win", "Draw", "Away Win")
+      // and pick the best odds for each outcome type
+      const bestByOutcomeName = outcomes.reduce(
+        (acc: Record<string, (typeof outcomes)[number]>, curr) => {
+          const key = curr.name || "";
+          if (!key) return acc;
+          if (!acc[key] || curr.odds > acc[key].odds) {
+            acc[key] = curr;
+          }
+          return acc;
+        },
+        {}
+      );
+
+      const bestOutcomes = Object.values(bestByOutcomeName);
+      const maxDisplay = 3; // Show max 3 outcomes (typical for 3-way markets)
+      const displayOutcomes = bestOutcomes.slice(0, maxDisplay);
+      const remainingCount = bestOutcomes.length - displayOutcomes.length;
+
       return (
-        <div className="flex flex-col gap-1">
-          {outcomes.map(
-            (outcome: SurebetEvent["outcomes"][0], index: number) => (
-              <div key={outcome.id} className="text-sm">
-                <span className="font-medium">{outcome.bookmaker}</span>
-                {" - "}
-                <span className="text-muted-foreground">{outcome.name}</span>
-                {" @ "}
-                <span className="font-semibold">{outcome.odds.toFixed(2)}</span>
-              </div>
-            )
+        <div className="flex flex-col gap-1 max-w-[280px]">
+          {displayOutcomes.map(
+            (outcome: SurebetEvent["outcomes"][0], index: number) => {
+              // Truncate bookmaker name if too long
+              const bookmaker =
+                outcome.bookmaker.length > 18
+                  ? outcome.bookmaker.substring(0, 18) + "..."
+                  : outcome.bookmaker;
+
+              return (
+                <div
+                  key={outcome.id}
+                  className="text-xs truncate"
+                  title={`${outcome.bookmaker} - ${
+                    outcome.name
+                  } @ ${outcome.odds.toFixed(2)}`}
+                >
+                  <span className="font-medium">{bookmaker}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    - {outcome.name}
+                  </span>
+                  <span className="font-semibold">
+                    {" "}
+                    @ {outcome.odds.toFixed(2)}
+                  </span>
+                </div>
+              );
+            }
+          )}
+          {remainingCount > 0 && (
+            <div className="text-xs text-muted-foreground italic">
+              +{remainingCount} more...
+            </div>
           )}
         </div>
       );
@@ -116,12 +161,17 @@ export const columns: ColumnDef<SurebetEvent>[] = [
   },
   {
     accessorKey: "total_inverse_odds",
-    header: "Inverse Odds",
+    header: "Arbitrage",
     cell: ({ row }: { row: any }) => {
       const total = row.getValue("total_inverse_odds") as number;
+      // Show as percentage below 100% for easier understanding
+      const arbPercentage = (total * 100).toFixed(2);
       return (
-        <span className="text-sm text-muted-foreground">
-          {total.toFixed(4)}
+        <span
+          className="text-xs text-muted-foreground"
+          title={`Total inverse odds: ${total.toFixed(4)}`}
+        >
+          {arbPercentage}%
         </span>
       );
     },
@@ -201,10 +251,10 @@ export const columns: ColumnDef<SurebetEvent>[] = [
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => console.log("View details:", surebet.event_id)}
-              >
-                View Details
+              <DropdownMenuItem asChild>
+                <Link href={`/bet/${surebet.event_id}`} className="w-full">
+                  View Details
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>
