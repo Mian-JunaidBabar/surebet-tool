@@ -29,12 +29,14 @@ type ScraperTarget = {
 type Settings = {
   refresh_interval: string;
   min_profit_threshold: string;
+  raptor_mini_enabled?: string;
 };
 
 export default function SettingsPage() {
   // Settings state
   const [refreshInterval, setRefreshInterval] = React.useState("30");
   const [minProfit, setMinProfit] = React.useState("2.0");
+  const [raptorEnabled, setRaptorEnabled] = React.useState(false);
 
   // Scraper targets state
   const [scraperTargets, setScraperTargets] = React.useState<ScraperTarget[]>(
@@ -75,6 +77,8 @@ export default function SettingsPage() {
       if (settingsData.settings) {
         setRefreshInterval(settingsData.settings.refresh_interval || "30");
         setMinProfit(settingsData.settings.min_profit_threshold || "2.0");
+        const raptorRaw = settingsData.settings.raptor_mini_enabled || "false";
+        setRaptorEnabled(String(raptorRaw).toLowerCase() === "true");
       }
 
       // Update scraper targets state
@@ -108,6 +112,7 @@ export default function SettingsPage() {
           settings: {
             refresh_interval: refreshInterval,
             min_profit_threshold: minProfit,
+            raptor_mini_enabled: raptorEnabled ? "true" : "false",
           },
         }),
       });
@@ -393,6 +398,26 @@ export default function SettingsPage() {
                       onChange={(e) => setMinProfit(e.target.value)}
                       placeholder="2.0"
                     />
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <Label htmlFor="raptor-mini">
+                        Enable Raptor mini (Preview)
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        When enabled, all connected clients will see the Raptor
+                        mini preview.
+                      </p>
+                    </div>
+                    <div>
+                      <Switch
+                        id="raptor-mini"
+                        checked={raptorEnabled}
+                        onCheckedChange={(val) =>
+                          setRaptorEnabled(Boolean(val))
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               </CardContent>

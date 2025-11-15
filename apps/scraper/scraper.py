@@ -134,59 +134,35 @@ def scrape_betexplorer(page, target_url: str) -> List[Dict[str, Any]]:
 
     try:
         page.goto(target_url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-        logger.info("⏳ Waiting for league table...")
-        table_selectors = [
-            ".table-main--leaguefixtures",
-            "table.table-main",
-            "table[class*='fixtures']",
-        ]
+        logger.info("⏳ Waiting for league table rows (.table-main__row)...")
 
-        table_found = False
-        for selector in table_selectors:
-            try:
-                page.wait_for_selector(selector, timeout=10000)
-                table_found = True
-                logger.info(f"✅ Found odds table with selector: {selector}")
-                break
-            except PlaywrightTimeoutError:
-                continue
-
-        if not table_found:
-            logger.warning("⚠️  No odds table detected on BetExplorer page")
+        try:
+            page.wait_for_selector(".table-main__row", timeout=12000)
+        except PlaywrightTimeoutError:
+            logger.warning("⚠️  Timed out waiting for BetExplorer rows")
             return events
 
-        row_selectors = [
-            "tr.table-main__tt, tr.table-main__tr",
-            "table tr[class*='match']",
-            "tbody tr",
-        ]
-
-        rows = []
-        for selector in row_selectors:
-            rows = page.query_selector_all(selector)
-            if rows:
-                logger.info(f"📊 Extracting from {len(rows)} rows using {selector}")
-                break
-
-        if not rows:
-            logger.warning("⚠️  No rows found in BetExplorer table")
-            return events
+        rows = page.query_selector_all(".table-main__row")
+        logger.info(f"📊 Processing {len(rows)} BetExplorer rows")
 
         for row in rows:
             try:
-                event_link = row.query_selector("td.table-main__tt > a, td.table-main__participant > a, td:first-child a")
+                event_link = row.query_selector("a.table-main__event, td.table-main__participant a, td.table-main__tt a")
                 if not event_link:
                     continue
+
                 event_name = clean_text(event_link.text_content() or "")
                 if not event_name:
                     continue
+
                 href = event_link.get_attribute("href") or ""
                 deep_link = urljoin("https://www.betexplorer.com", href) if href else target_url
 
-                odds_cells = row.query_selector_all("td.table-main__detail-odds, td[data-odd], td.odds-cell, td[class*='odds']")
-                odds_list = []
+                odds_cells = row.query_selector_all("td.table-main__odds, td.odds, td[data-odd]")
+                odds_list: List[float] = []
                 for cell in odds_cells:
-                    odds_value = extract_odds(clean_text(cell.text_content() or ""))
+                    text = clean_text(cell.text_content() or "")
+                    odds_value = extract_odds(text)
                     if odds_value:
                         odds_list.append(odds_value)
 
@@ -215,44 +191,34 @@ def scrape_oddschecker(page, target_url: str) -> List[Dict[str, Any]]:
 
     try:
         page.goto(target_url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-        logger.info("⏳ Waiting for coupon rows...")
+        logger.info("⏳ Waiting for coupon rows (data-testid=coupon-event-row)...")
 
-        row_selectors = [
-            ".match-coupon__event-row",
-            "tr[data-event-row]",
-            "tr[class*='event']",
-        ]
-
-        rows = []
-        for selector in row_selectors:
-            try:
-                page.wait_for_selector(selector, timeout=10000)
-                rows = page.query_selector_all(selector)
-                if rows:
-                    logger.info(f"✅ Found {len(rows)} rows using {selector}")
-                    break
-            except PlaywrightTimeoutError:
-                continue
-
-        if not rows:
-            logger.warning("⚠️  No event rows detected on Oddschecker page")
+        try:
+            page.wait_for_selector('[data-testid="coupon-event-row"]', timeout=12000)
+        except PlaywrightTimeoutError:
+            logger.warning("⚠️  Timeout waiting for Oddschecker coupon rows")
             return events
+
+        rows = page.query_selector_all('[data-testid="coupon-event-row"]')
+        logger.info(f"📊 Processing {len(rows)} Oddschecker rows")
 
         for row in rows:
             try:
-                link = row.query_selector("a[href*='/football'], a[href*='/horse-racing'], a[href*='/basketball'], a[href*='/tennis']") or row.query_selector("a")
-                if not link:
+                name_el = row.query_selector('[data-testid="coupon-event-name"]')
+                if not name_el:
                     continue
-                event_name = clean_text(link.text_content() or "")
+                event_name = clean_text(name_el.text_content() or "")
                 if not event_name:
                     continue
-                href = link.get_attribute("href") or ""
+
+                link = row.query_selector("a[href*='/football'], a[href*='/horse-racing'], a[href*='/basketball'], a[href*='/tennis']") or row.query_selector("a")
+                href = link.get_attribute("href") if link else None
                 deep_link = urljoin("https://www.oddschecker.com", href) if href else target_url
 
+                odds_cells = row.query_selector_all('[data-testid="odds-cell"], [data-testid="bookmaker-odds"], button[data-odds]')
                 odds_list: List[float] = []
-                odds_elements = row.query_selector_all("[data-odds], .odds, button[class*='bet'], [class*='price']")
-                for elem in odds_elements:
-                    candidate = elem.get_attribute("data-odds") or elem.text_content()
+                for cell in odds_cells:
+                    candidate = cell.get_attribute("data-odds") or cell.text_content()
                     odds_value = extract_odds(clean_text(candidate or "")) if candidate else None
                     if odds_value:
                         odds_list.append(odds_value)

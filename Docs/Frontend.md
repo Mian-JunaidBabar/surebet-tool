@@ -75,6 +75,23 @@ The application currently uses mock data in `app/dashboard/mock-data.ts` with 12
 - Stake calculator modal
 - Authentication & user preferences
 - Historical data analytics
+- Raptor mini (Preview): toggled via Settings -> General Settings. This flag controls the client-side preview and is stored globally in the backend settings (`raptor_mini_enabled`). Seeding sets this to `true` by default.
+
+### Enable/Disable Raptor mini globally
+
+Use the Settings page (`/settings`) to toggle Raptor mini for all clients. You can also update it directly via the backend API:
+
+```bash
+# Enable
+curl -X POST http://localhost:8000/api/v1/settings \
+   -H "Content-Type: application/json" \
+   -d '{"settings": {"raptor_mini_enabled": "true"}}'
+
+# Disable
+curl -X POST http://localhost:8000/api/v1/settings \
+   -H "Content-Type: application/json" \
+   -d '{"settings": {"raptor_mini_enabled": "false"}}'
+```
 
 ## Learn More
 

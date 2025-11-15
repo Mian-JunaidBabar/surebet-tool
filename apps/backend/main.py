@@ -63,6 +63,11 @@ try:
 
         db.commit()
         logger.info(f"✅ Created {len(default_targets)} default scraper targets")
+        # Seed default global settings
+        if db.query(models.Setting).filter(models.Setting.key == "raptor_mini_enabled").first() is None:
+            db.add(models.Setting(key="raptor_mini_enabled", value="true"))
+            logger.info("✅ Seeded default setting: raptor_mini_enabled=true")
+            db.commit()
     else:
         logger.info("✅ Scraper targets already exist, skipping seeding")
         

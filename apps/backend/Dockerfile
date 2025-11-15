@@ -4,14 +4,26 @@ FROM python:3.12-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# Install curl for healthcheck and sqlite3 for debugging the DB
+RUN apt-get update \
+    # Install runtime utilities (curl, sqlite3) plus build deps so binary modules
+    # like greenlet can be built if a compatible wheel isn't available on PyPI.
+    && apt-get install -y \
+    curl \
+    sqlite3 \
+    build-essential \
+    gcc \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip/setuptools/wheel first (improves resolver and wheel handling),
+# then install Python dependencies. Using --no-cache-dir reduces image size.
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
