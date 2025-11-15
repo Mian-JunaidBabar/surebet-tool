@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Activity,
+  ExternalLink,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [isScraperLoading, setIsScraperLoading] = useState(false);
   const [isStealthLoading, setIsStealthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scraperError, setScraperError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [apiUsage, setApiUsage] = useState<ApiUsage | null>(null);
@@ -142,9 +144,12 @@ export default function DashboardPage() {
           );
           const checkData = await checkResponse.json();
           if (checkData.total_count === 0) {
-            toast.warning(
-              "⚠️ Scraper completed but found no events. Target sites may be blocking or have no live odds."
-            );
+            const errorMsg =
+              "⚠️ Basic scraper completed but found no events. Target sites may be blocking scraping or have no live odds available.";
+            setScraperError(errorMsg);
+            toast.warning(errorMsg);
+          } else {
+            setScraperError(null);
           }
         } catch (e) {
           console.log("Could not check scraper results:", e);
@@ -196,9 +201,12 @@ export default function DashboardPage() {
           );
           const checkData = await checkResponse.json();
           if (checkData.total_count === 0) {
-            toast.warning(
-              "⚠️ Stealth scraper completed but found no events. Sites may still be blocking or have no live odds."
-            );
+            const errorMsg =
+              "⚠️ Stealth scraper completed but found no events. Sites may still be blocking scraping, or selectors need updates. Try configuring a proxy in .env (PROXY_URL).";
+            setScraperError(errorMsg);
+            toast.warning(errorMsg);
+          } else {
+            setScraperError(null);
           }
         } catch (e) {
           console.log("Could not check stealth scraper results:", e);
@@ -451,10 +459,21 @@ export default function DashboardPage() {
                       <Database className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">API Credits</span>
                     </div>
-                    <span className="text-sm font-bold">
-                      {apiUsage.used} /{" "}
-                      {parseInt(apiUsage.used) + parseInt(apiUsage.remaining)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">
+                        {apiUsage.used} /{" "}
+                        {parseInt(apiUsage.used) + parseInt(apiUsage.remaining)}
+                      </span>
+                      <a
+                        href="https://dash.the-odds-api.com/api-subscriptions"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors flex items-center gap-1"
+                      >
+                        Dashboard
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
@@ -501,6 +520,18 @@ export default function DashboardPage() {
             <AlertDescription>
               Failed to fetch surebet data: {error}. Please make sure the
               backend is running and try again.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Scraper Error Banner */}
+      {scraperError && !error && (
+        <div className="container mx-auto px-4">
+          <Alert className="max-w-4xl mx-auto bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              {scraperError}
             </AlertDescription>
           </Alert>
         </div>

@@ -55,9 +55,19 @@ export const columns: ColumnDef<SurebetEvent>[] = [
     cell: ({ row }: { row: any }) => {
       const event = row.getValue("event") as string;
       const sport = row.original.sport;
+
+      // Truncate long event names to prevent UI breaks
+      const maxLength = 80;
+      const displayEvent =
+        event.length > maxLength
+          ? event.substring(0, maxLength) + "..."
+          : event;
+
       return (
         <div className="flex flex-col">
-          <span className="font-medium">{event}</span>
+          <span className="font-medium" title={event}>
+            {displayEvent}
+          </span>
           <span className="text-sm text-muted-foreground">{sport}</span>
         </div>
       );

@@ -46,64 +46,22 @@ try:
     if existing_targets is None:
         logger.info("📍 No scraper targets found. Creating default targets...")
 
-        # Create default scraper targets for multiple sports and sites
         default_targets = [
-            # BetExplorer targets
-            models.ScraperTarget(
-                name="BetExplorer Football",
-                url="https://www.betexplorer.com/football/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="BetExplorer Basketball",
-                url="https://www.betexplorer.com/basketball/",
-                is_active=True
-            ),
-            # Oddschecker targets
-            models.ScraperTarget(
-                name="Oddschecker Homepage",
-                url="https://www.oddschecker.com/",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="Oddschecker Football",
-                url="https://www.oddschecker.com/football",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="Oddschecker Horse Racing",
-                url="https://www.oddschecker.com/horse-racing",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="Oddschecker Golf",
-                url="https://www.oddschecker.com/golf",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="Oddschecker Boxing",
-                url="https://www.oddschecker.com/boxing",
-                is_active=True
-            ),
-            models.ScraperTarget(
-                name="Oddschecker Cricket",
-                url="https://www.oddschecker.com/cricket",
-                is_active=True
-            ),
-            # Oddsportal target
-            models.ScraperTarget(
-                name="Oddsportal Homepage",
-                url="https://www.oddsportal.com/",
-                is_active=True
-            )
+            {"name": "BetExplorer - Premier League", "url": "https://www.betexplorer.com/football/england/premier-league/", "is_active": True},
+            {"name": "BetExplorer - NBA", "url": "https://www.betexplorer.com/basketball/usa/nba/", "is_active": True},
+            {"name": "BetExplorer - NHL", "url": "https://www.betexplorer.com/hockey/usa/nhl/", "is_active": True},
+            {"name": "Oddschecker - Football", "url": "https://www.oddschecker.com/football", "is_active": True},
+            {"name": "Oddschecker - Horse Racing", "url": "https://www.oddschecker.com/horse-racing", "is_active": True},
+            {"name": "Oddsportal - Germany Bundesliga", "url": "https://www.oddsportal.com/football/germany/bundesliga/", "is_active": True},
+            {"name": "Oddsportal - Tennis ATP", "url": "https://www.oddsportal.com/tennis/atp-singles/", "is_active": True},
         ]
 
         for target in default_targets:
-            db.add(target)
-            logger.info(f"✅ Created default scraper target: {target.name}")
+            scraper_target = models.ScraperTarget(**target)
+            db.add(scraper_target)
+            logger.info(f"✅ Created default scraper target: {scraper_target.name}")
 
         db.commit()
-
         logger.info(f"✅ Created {len(default_targets)} default scraper targets")
     else:
         logger.info("✅ Scraper targets already exist, skipping seeding")

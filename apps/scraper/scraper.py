@@ -128,495 +128,212 @@ def extract_odds(odds_text: str) -> Optional[float]:
 
 
 def scrape_betexplorer(page, target_url: str) -> List[Dict[str, Any]]:
-    """
-    Scrape betting odds from BetExplorer.com (HARDENED VERSION)
-    
-    This function handles BetExplorer's specific structure with robust fallbacks:
-    - Navigates to sport homepage
-    - Mimics human interaction
-    - Tries multiple strategies to find content
-    - Has fallbacks for each step
-    - Extracts event data with odds
-    
-    Args:
-        page: Playwright page object
-        target_url: URL to scrape
-        
-    Returns:
-        List of scraped event dictionaries
-    """
+    """Scrape BetExplorer league pages by waiting directly for the odds table."""
     logger.info(f"🎯 Starting BetExplorer scraping for: {target_url}")
-    events = []
-    
+    events: List[Dict[str, Any]] = []
+
     try:
-        # Navigate to the target URL
-        logger.info(f"📍 Navigating to {target_url}")
         page.goto(target_url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-        
-        # Mimic human interaction - move mouse randomly
-        try:
-            page.mouse.move(500, 300)
-            time.sleep(0.5)
-        except Exception as e:
-            logger.debug(f"Mouse move failed: {e}")
-        
-        # Wait for page to be interactive - try multiple possible indicators
-        logger.info("⏳ Waiting for page to be interactive...")
-        page_ready = False
-        
-        for selector in ["body", "#layout", ".main-content", "main"]:
-            try:
-                page.wait_for_selector(selector, timeout=5000, state="attached")
-                logger.info(f"✅ Page ready (found: {selector})")
-                page_ready = True
-                break
-            except PlaywrightTimeoutError:
-                continue
-        
-        if not page_ready:
-            logger.warning("⚠️  Could not confirm page ready, proceeding anyway...")
-        
-        # Strategy 1: Try to find and click a league link
-        logger.info("🔍 Strategy 1: Looking for league links...")
-        league_clicked = False
-        
-        # Try multiple possible selectors for league links
-        league_selectors = [
-            "a.list-events__item__title",
-            ".list-events a[href*='/football/']",
-            ".list-events a[href*='/basketball/']",
-            "a[href*='results']",
-            ".upcoming-events a"
-        ]
-        
-        for selector in league_selectors:
-            try:
-                page.wait_for_selector(selector, timeout=5000)
-                league_links = page.query_selector_all(selector)
-                
-                if league_links and len(league_links) > 0:
-                    first_league = league_links[0]
-                    league_name = clean_text(first_league.text_content() or "Unknown")
-                    logger.info(f"✅ Found league: {league_name} (using selector: {selector})")
-                    
-                    # Click the league link
-                    first_league.click()
-                    logger.info("👆 Clicked on league link")
-                    
-                    # Wait for navigation or content change
-                    time.sleep(2)
-                    league_clicked = True
-                    break
-                    
-            except PlaywrightTimeoutError:
-                logger.debug(f"Selector not found: {selector}")
-                continue
-            except Exception as e:
-                logger.debug(f"Error with selector {selector}: {e}")
-                continue
-        
-        if not league_clicked:
-            logger.warning("⚠️  No league links found, will try to scrape current page directly")
-        
-        # Strategy 2: Find odds table with multiple fallbacks
-        logger.info("📊 Strategy 2: Looking for odds table...")
-        odds_table_found = False
-        
-        # Try multiple possible selectors for odds tables
+        logger.info("⏳ Waiting for league table...")
         table_selectors = [
             ".table-main--leaguefixtures",
             "table.table-main",
-            ".matches-table",
             "table[class*='fixtures']",
-            "table[class*='matches']"
         ]
-        
+
+        table_found = False
         for selector in table_selectors:
             try:
-                page.wait_for_selector(selector, timeout=8000)
-                logger.info(f"✅ Odds table found (using selector: {selector})")
-                odds_table_found = True
+                page.wait_for_selector(selector, timeout=10000)
+                table_found = True
+                logger.info(f"✅ Found odds table with selector: {selector}")
                 break
             except PlaywrightTimeoutError:
-                logger.debug(f"Table selector not found: {selector}")
                 continue
-        
-        if not odds_table_found:
-            logger.warning("⚠️  No odds table found, will try to extract from any table rows")
-        
-        # Strategy 3: Extract data from rows with multiple fallbacks
-        logger.info("🔎 Strategy 3: Extracting event data...")
-        
-        # Try multiple row selectors
+
+        if not table_found:
+            logger.warning("⚠️  No odds table detected on BetExplorer page")
+            return events
+
         row_selectors = [
             "tr.table-main__tt, tr.table-main__tr",
             "table tr[class*='match']",
-            "table tr[class*='event']",
-            ".matches-table tr",
-            "tbody tr"
+            "tbody tr",
         ]
-        
+
         rows = []
         for selector in row_selectors:
             rows = page.query_selector_all(selector)
-            if rows and len(rows) > 0:
-                logger.info(f"📊 Found {len(rows)} potential event rows (using: {selector})")
+            if rows:
+                logger.info(f"📊 Extracting from {len(rows)} rows using {selector}")
                 break
-        
+
         if not rows:
-            logger.error("❌ No event rows found with any selector")
+            logger.warning("⚠️  No rows found in BetExplorer table")
             return events
-        
-        # Extract data from rows
-        for idx, row in enumerate(rows):
+
+        for row in rows:
             try:
-                # Try multiple selectors for event links
-                event_link = None
-                link_selectors = [
-                    "td.table-main__tt > a",
-                    "td.table-main__participant > a",
-                    "td a[href*='/football/']",
-                    "td a[href*='/basketball/']",
-                    "a[href*='betexplorer.com']",
-                    "td:first-child a"
-                ]
-                
-                for link_sel in link_selectors:
-                    event_link = row.query_selector(link_sel)
-                    if event_link:
-                        break
-                
+                event_link = row.query_selector("td.table-main__tt > a, td.table-main__participant > a, td:first-child a")
                 if not event_link:
                     continue
-                
                 event_name = clean_text(event_link.text_content() or "")
-                if not event_name or len(event_name) < 3:
+                if not event_name:
                     continue
-                
-                # Get the deep link (full URL)
                 href = event_link.get_attribute("href") or ""
-                deep_link = urljoin("https://www.betexplorer.com", href) if href else ""
-                
-                # Extract odds from the row - try multiple selectors
-                odds_cells = []
-                odds_selectors = [
-                    "td.table-main__detail-odds",
-                    "td[data-odd]",
-                    "td.odds-cell",
-                    "td[class*='odds']"
-                ]
-                
-                for odds_sel in odds_selectors:
-                    odds_cells = row.query_selector_all(odds_sel)
-                    if odds_cells and len(odds_cells) > 0:
-                        break
-                
+                deep_link = urljoin("https://www.betexplorer.com", href) if href else target_url
+
+                odds_cells = row.query_selector_all("td.table-main__detail-odds, td[data-odd], td.odds-cell, td[class*='odds']")
                 odds_list = []
                 for cell in odds_cells:
-                    odds_text = clean_text(cell.text_content() or "")
-                    odds_value = extract_odds(odds_text)
+                    odds_value = extract_odds(clean_text(cell.text_content() or ""))
                     if odds_value:
                         odds_list.append(odds_value)
-                
-                # Only add events that have odds data
+
                 if odds_list:
-                    event_data = {
+                    events.append({
                         "event_name": event_name,
                         "odds": odds_list,
                         "deep_link": deep_link,
                         "source": "BetExplorer",
-                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    events.append(event_data)
-                    logger.info(f"✅ Scraped: {event_name} with {len(odds_list)} odds")
-                
+                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    })
             except Exception as row_error:
-                logger.debug(f"Skipped row due to: {str(row_error)}")
-                continue
-        
+                logger.debug(f"Skipped BetExplorer row due to: {row_error}")
+
     except Exception as e:
         logger.error(f"❌ Error scraping BetExplorer: {str(e)}")
-    
+
     logger.info(f"✅ BetExplorer scraping complete: {len(events)} events found")
     return events
 
 
 def scrape_oddschecker(page, target_url: str) -> List[Dict[str, Any]]:
-    """
-    Scrape betting odds from Oddschecker.com (HARDENED VERSION with role-based selectors)
-    
-    This function handles Oddschecker's specific structure with resilience:
-    - Uses role-based and content-based selectors (more resilient than CSS classes)
-    - Has multiple fallback strategies for each element type
-    - Mimics human interaction to avoid anti-bot measures
-    - Handles various page layouts
-    
-    Args:
-        page: Playwright page object
-        target_url: URL to scrape
-        
-    Returns:
-        List of scraped event dictionaries
-    """
+    """Scrape Oddschecker sport pages by directly parsing displayed coupons."""
     logger.info(f"🎯 Starting Oddschecker scraping for: {target_url}")
-    events = []
-    
+    events: List[Dict[str, Any]] = []
+
     try:
-        # Navigate to the target URL
-        logger.info(f"📍 Navigating to {target_url}")
         page.goto(target_url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-        
-        # Mimic human interaction
-        try:
-            page.mouse.move(400, 400)
-            time.sleep(0.3)
-        except Exception as e:
-            logger.debug(f"Mouse move failed: {e}")
-        
-        # Wait for page to be interactive - try role-based and semantic selectors first
-        logger.info("⏳ Waiting for page to be interactive...")
-        page_ready = False
-        
-        # Try semantic/role-based selectors first (more resilient)
-        ready_selectors = [
-            "main",
-            "[role='main']",
-            "#sports-navigation",
-            ".main-content",
-            "body"
+        logger.info("⏳ Waiting for coupon rows...")
+
+        row_selectors = [
+            ".match-coupon__event-row",
+            "tr[data-event-row]",
+            "tr[class*='event']",
         ]
-        
-        for selector in ready_selectors:
+
+        rows = []
+        for selector in row_selectors:
             try:
-                page.wait_for_selector(selector, timeout=5000, state="attached")
-                logger.info(f"✅ Page ready (found: {selector})")
-                page_ready = True
-                break
+                page.wait_for_selector(selector, timeout=10000)
+                rows = page.query_selector_all(selector)
+                if rows:
+                    logger.info(f"✅ Found {len(rows)} rows using {selector}")
+                    break
             except PlaywrightTimeoutError:
                 continue
-        
-        if not page_ready:
-            logger.warning("⚠️  Could not confirm page ready, proceeding anyway...")
-        
-        # Strategy 1: Find event rows using multiple approaches
-        logger.info("🔍 Looking for event rows...")
-        event_rows = []
-        
-        # Try role-based selectors first (most resilient)
-        try:
-            # Look for table rows containing odds
-            rows_by_role = page.get_by_role("row").all()
-            if rows_by_role and len(rows_by_role) > 0:
-                # Filter to only rows that look like event rows (have links and odds)
-                event_rows = [r for r in rows_by_role if r.query_selector("a") and 
-                             (r.query_selector("[data-odds]") or r.query_selector(".odds") or r.query_selector("[class*='odd']"))]
-                if event_rows:
-                    logger.info(f"✅ Found {len(event_rows)} event rows using role='row'")
-        except Exception as e:
-            logger.debug(f"Role-based row lookup failed: {e}")
-        
-        # Fallback to CSS selectors if role-based failed
-        if not event_rows:
-            css_row_selectors = [
-                ".match-coupon__event-row",
-                ".event-row",
-                "[data-event-row]",
-                "tr[class*='event']",
-                "tr[class*='match']"
-            ]
-            
-            for selector in css_row_selectors:
-                event_rows = page.query_selector_all(selector)
-                if event_rows and len(event_rows) > 0:
-                    logger.info(f"✅ Found {len(event_rows)} event rows using CSS: {selector}")
-                    break
-        
-        if not event_rows:
-            logger.error("❌ No event rows found with any strategy")
+
+        if not rows:
+            logger.warning("⚠️  No event rows detected on Oddschecker page")
             return events
-        
-        logger.info(f"📊 Processing {len(event_rows)} event rows")
-        
-        # Strategy 2: Extract data from each row
-        for idx, row in enumerate(event_rows):
+
+        for row in rows:
             try:
-                # Extract event name using role-based approach first
-                event_name = ""
-                deep_link = ""
-                
-                # Try to find event link using role-based selector
-                try:
-                    event_link = row.get_by_role("link").first
-                    if event_link:
-                        event_name = clean_text(event_link.text_content() or "")
-                        href = event_link.get_attribute("href") or ""
-                        deep_link = urljoin("https://www.oddschecker.com", href) if href else ""
-                except Exception as e:
-                    logger.debug(f"Role-based link extraction failed: {e}")
-                
-                # Fallback to CSS selectors for event name
-                if not event_name:
-                    name_selectors = [
-                        ".match-coupon__event-row-name",
-                        ".event-name",
-                        ".participant-name",
-                        "a.name",
-                        "a[href*='/football/']",
-                        "a[href*='/basketball/']",
-                        "td:first-child a"
-                    ]
-                    
-                    for name_sel in name_selectors:
-                        event_elem = row.query_selector(name_sel)
-                        if event_elem:
-                            event_name = clean_text(event_elem.text_content() or "")
-                            if not deep_link:
-                                href = event_elem.get_attribute("href") or ""
-                                deep_link = urljoin("https://www.oddschecker.com", href) if href else ""
-                            if event_name:
-                                break
-                
-                if not event_name or len(event_name) < 3:
+                link = row.query_selector("a[href*='/football'], a[href*='/horse-racing'], a[href*='/basketball'], a[href*='/tennis']") or row.query_selector("a")
+                if not link:
                     continue
-                
-                # Extract odds using multiple strategies
-                odds_list = []
-                
-                # Try data attributes first (most reliable)
-                odds_with_data = row.query_selector_all("[data-odds], [data-best-odd], [data-odig]")
-                for elem in odds_with_data:
-                    odds_value = elem.get_attribute("data-odds") or elem.get_attribute("data-best-odd") or elem.get_attribute("data-odig")
+                event_name = clean_text(link.text_content() or "")
+                if not event_name:
+                    continue
+                href = link.get_attribute("href") or ""
+                deep_link = urljoin("https://www.oddschecker.com", href) if href else target_url
+
+                odds_list: List[float] = []
+                odds_elements = row.query_selector_all("[data-odds], .odds, button[class*='bet'], [class*='price']")
+                for elem in odds_elements:
+                    candidate = elem.get_attribute("data-odds") or elem.text_content()
+                    odds_value = extract_odds(clean_text(candidate or "")) if candidate else None
                     if odds_value:
-                        parsed_odds = extract_odds(odds_value)
-                        if parsed_odds:
-                            odds_list.append(parsed_odds)
-                
-                # Fallback to text content if data attributes failed
-                if not odds_list:
-                    odds_selectors = [
-                        ".odds",
-                        ".all-odds",
-                        ".bet-btn",
-                        "[class*='odds']",
-                        "button[class*='bet']"
-                    ]
-                    
-                    for odds_sel in odds_selectors:
-                        odds_elements = row.query_selector_all(odds_sel)
-                        if odds_elements:
-                            for elem in odds_elements:
-                                odds_text = clean_text(elem.text_content() or "")
-                                odds_value = extract_odds(odds_text)
-                                if odds_value:
-                                    odds_list.append(odds_value)
-                            if odds_list:
-                                break
-                
-                # Only add events with valid odds
-                if odds_list and len(odds_list) > 0:
-                    event_data = {
+                        odds_list.append(odds_value)
+
+                if odds_list:
+                    events.append({
                         "event_name": event_name,
                         "odds": odds_list,
                         "deep_link": deep_link,
                         "source": "Oddschecker",
-                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    events.append(event_data)
-                    logger.info(f"✅ Scraped: {event_name} with {len(odds_list)} odds")
-                
+                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    })
             except Exception as row_error:
-                logger.debug(f"Skipped row {idx} due to: {str(row_error)}")
-                continue
-        
+                logger.debug(f"Skipped Oddschecker row due to: {row_error}")
+
     except Exception as e:
         logger.error(f"❌ Error scraping Oddschecker: {str(e)}")
-    
+
     logger.info(f"✅ Oddschecker scraping complete: {len(events)} events found")
     return events
 
 
 def scrape_oddsportal(page, target_url: str) -> List[Dict[str, Any]]:
-    """
-    Scrape betting odds from Oddsportal.com
-    
-    This function handles Oddsportal's specific structure.
-    
-    Args:
-        page: Playwright page object
-        target_url: URL to scrape
-        
-    Returns:
-        List of scraped event dictionaries
-    """
+    """Scrape Oddsportal league pages directly from their event rows."""
     logger.info(f"🎯 Starting Oddsportal scraping for: {target_url}")
-    events = []
-    
+    events: List[Dict[str, Any]] = []
+
     try:
-        # Navigate to the target URL
-        logger.info(f"📍 Navigating to {target_url}")
         page.goto(target_url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-        
-        # Wait for content to load
-        try:
-            page.wait_for_selector(".eventRow, [data-v-event], .event-line", timeout=15000)
-            logger.info("✅ Event rows loaded")
-        except PlaywrightTimeoutError:
-            logger.warning("⚠️  Timeout waiting for event rows")
-            return events
-        
-        # Find all event rows
-        event_rows = page.query_selector_all(".eventRow, [data-v-event], .event-line")
-        logger.info(f"📊 Found {len(event_rows)} event rows")
-        
-        for row in event_rows:
+        selectors = [".eventRow", "[data-v-event]", ".event-line"]
+        rows = []
+
+        for selector in selectors:
             try:
-                # Extract event name
-                event_name_elem = row.query_selector(".name, .event-name, a.participant")
-                
+                page.wait_for_selector(selector, timeout=12000)
+                rows = page.query_selector_all(selector)
+                if rows:
+                    logger.info(f"✅ Found {len(rows)} rows with selector {selector}")
+                    break
+            except PlaywrightTimeoutError:
+                continue
+
+        if not rows:
+            logger.warning("⚠️  No Oddsportal event rows located")
+            return events
+
+        for row in rows:
+            try:
+                event_name_elem = row.query_selector(".name, .event-name, a.participant, a[href*='/match/']")
                 if not event_name_elem:
                     continue
-                
                 event_name = clean_text(event_name_elem.text_content() or "")
                 if not event_name:
                     continue
-                
-                # Get deep link
-                event_link = event_name_elem if event_name_elem.evaluate("el => el.tagName") == "A" else row.query_selector("a")
+                event_link = event_name_elem if event_name_elem.get_attribute("href") else row.query_selector("a")
                 deep_link = ""
-                
                 if event_link:
                     href = event_link.get_attribute("href") or ""
-                    deep_link = urljoin("https://www.oddsportal.com", href) if href else ""
-                
-                # Extract odds
+                    deep_link = urljoin("https://www.oddsportal.com", href) if href else target_url
+
                 odds_elements = row.query_selector_all(".odds-nowrp, .odds, [data-odd]")
                 odds_list = []
-                
                 for elem in odds_elements:
-                    odds_text = clean_text(elem.text_content() or "")
-                    odds_value = extract_odds(odds_text)
+                    odds_value = extract_odds(clean_text(elem.text_content() or ""))
                     if odds_value:
                         odds_list.append(odds_value)
-                
-                # Only add events with odds
+
                 if odds_list:
-                    event_data = {
+                    events.append({
                         "event_name": event_name,
                         "odds": odds_list,
                         "deep_link": deep_link,
                         "source": "Oddsportal",
-                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    events.append(event_data)
-                    logger.info(f"✅ Scraped: {event_name} with {len(odds_list)} odds")
-                
+                        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    })
             except Exception as row_error:
-                logger.error(f"❌ Error parsing Oddsportal row: {str(row_error)}")
-                continue
-        
+                logger.debug(f"Skipped Oddsportal row due to: {row_error}")
+
     except Exception as e:
         logger.error(f"❌ Error scraping Oddsportal: {str(e)}")
-    
+
     logger.info(f"✅ Oddsportal scraping complete: {len(events)} events found")
     return events
 
@@ -822,11 +539,14 @@ def run_the_scrape():
     
     # Start Playwright
     with sync_playwright() as p:
-        logger.info("🌐 Launching browser...")
+        logger.info("🌐 Launching browser once for all targets...")
         browser = p.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-setuid-sandbox']
         )
+
+        # Reuse a single browser context for the full run
+        context = browser.new_context()
         
         try:
             for target in targets:
@@ -843,15 +563,12 @@ def run_the_scrape():
                 logger.info(f"🔗 URL: {target_url}")
                 logger.info(f"{'='*60}\n")
                 
-                # Create a new page for this target
-                page = browser.new_page()
+                page = context.new_page()
                 
                 try:
-                    # Route to appropriate scraper
                     events = route_scraper(page, target_url, target_name)
                     
                     if events:
-                        # Add target ID to each event
                         for event in events:
                             event["target_id"] = target_id
                         
@@ -864,15 +581,12 @@ def run_the_scrape():
                     logger.error(f"❌ Error scraping {target_name}: {str(e)}")
                 
                 finally:
-                    # Always close the page
                     page.close()
                     logger.info(f"🔒 Closed page for {target_name}")
                 
-                # Small delay between targets
                 time.sleep(RETRY_DELAY)
-            
         finally:
-            # Always close the browser
+            context.close()
             browser.close()
             logger.info("🔒 Browser closed")
     
