@@ -27,15 +27,41 @@ type SurebetEvent = {
 
 async function fetchSurebet(eventId: string): Promise<SurebetEvent | null> {
   try {
-    const res = await fetch("http://localhost:8000/api/v1/surebets", {
-      // Server component fetch: revalidate shortly to keep it fresh
-      next: { revalidate: 10 },
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `http://localhost:8000/api/v1/surebets/${encodeURIComponent(eventId)}`,
+      {
+        next: { revalidate: 10 },
+        cache: "no-store",
+      }
+    );
     if (!res.ok) return null;
-    const data = await res.json();
-    const items = (data?.surebets || []) as SurebetEvent[];
-    return items.find((s) => s.event_id === eventId) || null;
+    const item = (await res.json()) as SurebetEvent;
+    return item || null;
+  } catch {
+    return null;
+  }
+}
+
+type PlainEvent = {
+  id: number;
+  event_id: string;
+  event: string;
+  sport: string;
+  outcomes: Outcome[];
+};
+
+async function fetchEvent(eventId: string): Promise<PlainEvent | null> {
+  try {
+    const res = await fetch(
+      `http://localhost:8000/api/v1/events/${encodeURIComponent(eventId)}`,
+      {
+        next: { revalidate: 10 },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return null;
+    const item = (await res.json()) as PlainEvent;
+    return item || null;
   } catch {
     return null;
   }
@@ -46,13 +72,15 @@ export default async function BetDetailPage({
 }: {
   params: { eventId: string };
 }) {
+  // Try surebet details first; if not, fall back to plain event
   const surebet = await fetchSurebet(params.eventId);
-  if (!surebet) {
-    notFound();
-  }
+  const plain = surebet ? null : await fetchEvent(params.eventId);
+  if (!surebet && !plain) notFound();
+
+  const event = (surebet || plain)!;
 
   // Build best outcomes by outcome name
-  const bestByName = surebet.outcomes.reduce<Record<string, Outcome>>(
+  const bestByName = event.outcomes.reduce<Record<string, Outcome>>(
     (acc, curr) => {
       const key = curr.name || "";
       if (!key) return acc;
@@ -84,20 +112,28 @@ export default async function BetDetailPage({
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-3">
-            <span className="truncate max-w-[70vw]" title={surebet.event}>
-              {surebet.event}
+            <span className="truncate max-w-[70vw]" title={event.event}>
+              {event.event}
             </span>
-            <Badge variant="secondary">{surebet.sport}</Badge>
-            <Badge variant="default" className="ml-auto">
-              Profit: {surebet.profit_percentage.toFixed(2)}%
-            </Badge>
+            <Badge variant="secondary">{event.sport}</Badge>
+            {surebet ? (
+              <Badge variant="default" className="ml-auto">
+                Profit: {surebet.profit_percentage.toFixed(2)}%
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="ml-auto">
+                Not currently a surebet
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div>Event ID: {surebet.event_id}</div>
-          <div>
-            Arbitrage (inverse odds): {surebet.total_inverse_odds.toFixed(4)}
-          </div>
+          <div>Event ID: {event.event_id}</div>
+          {surebet && (
+            <div>
+              Arbitrage (inverse odds): {surebet.total_inverse_odds.toFixed(4)}
+            </div>
+          )}
           {bestLinks.length > 0 && (
             <div className="pt-2">
               <Button
@@ -121,7 +157,7 @@ export default async function BetDetailPage({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {surebet.outcomes.map((out) => {
+            {event.outcomes.map((out) => {
               const isBest = bestByName[out.name]?.id === out.id;
               return (
                 <div

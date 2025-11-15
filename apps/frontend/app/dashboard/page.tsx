@@ -192,15 +192,29 @@ export default function DashboardPage() {
       setIsConnected(false);
     });
 
-    // Listen for new surebet updates from backend
+    // Listen for new surebet updates from backend (handle both payload shapes)
     socket.on("new_surebets", (data: any) => {
       console.log("📡 Received new surebets via WebSocket:", data);
 
-      if (data && Array.isArray(data)) {
-        setSurebets(data);
+      // Case 1: backend emitted a plain array
+      if (Array.isArray(data)) {
+        setSurebets(data as SurebetEvent[]);
         setLastRefresh(new Date());
         console.log(`🔄 Updated dashboard with ${data.length} surebets`);
         toast.success(`Updated with ${data.length} new surebet opportunities!`);
+        return;
+      }
+
+      // Case 2: backend emitted an object { surebets: [...], total_count, timestamp }
+      if (data && Array.isArray(data.surebets)) {
+        setSurebets(data.surebets as SurebetEvent[]);
+        setLastRefresh(new Date());
+        console.log(
+          `🔄 Updated dashboard with ${data.surebets.length} surebets`
+        );
+        toast.success(
+          `Updated with ${data.surebets.length} new surebet opportunities!`
+        );
       }
     });
 
@@ -210,6 +224,30 @@ export default function DashboardPage() {
       socket.disconnect();
     };
   }, []); // Empty dependency array - only run once on mount
+
+  // Fetch persisted surebets on initial load so navigation doesn't clear the table
+  useEffect(() => {
+    const loadSurebets = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const res = await fetch("http://localhost:8000/api/v1/surebets", {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: SurebetsResponse = await res.json();
+        setSurebets(data.surebets || []);
+        setLastRefresh(new Date());
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to load data";
+        console.error("Failed to load surebets:", msg);
+        setError(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSurebets();
+  }, []);
 
   // Derive aggregate stats from live data
   const totalBets = surebets.length;

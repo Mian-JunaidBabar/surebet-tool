@@ -389,9 +389,19 @@ def send_data_to_backend(events: List[Dict[str, Any]]) -> bool:
             elif "/tennis/" in deep_link:
                 sport = "tennis"
             
-            # Generate a unique event_id from the event name
+            # Generate a stable, URL-safe event_id from the event name
+            # Keep alphanumerics, convert spaces and separators to '-', drop others
+            import re
             event_name = event.get("event_name", "Unknown Event")
-            event_id = event_name.lower().replace(" ", "-").replace("vs", "").replace("--", "-")
+            base = event_name.strip().lower()
+            # Replace 'vs' with dash separator and collapse spaces
+            base = re.sub(r"\bvs\b", "-", base)
+            base = re.sub(r"\s+", "-", base)
+            # Keep only url-safe chars [a-z0-9-]
+            base = re.sub(r"[^a-z0-9-]", "", base)
+            # Collapse multiple dashes
+            base = re.sub(r"-+", "-", base).strip("-")
+            event_id = base or "event"
             
             # Get bookmaker from source
             bookmaker = event.get("source", "Unknown")

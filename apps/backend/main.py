@@ -341,6 +341,91 @@ async def get_surebets(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/v1/surebets/{event_id}", response_model=schemas.SurebetEvent)
+async def get_surebet_detail(event_id: str, db: Session = Depends(get_db)):
+    """
+    Get a single surebet by its event_id.
+
+    Looks up the event, recalculates the surebet metrics, and returns the full
+    SurebetEvent payload. Returns 404 if not found or not a surebet.
+    """
+    try:
+        event = crud.get_event_by_event_id(db, event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        is_surebet, profit_percentage, total_inverse_odds = calculate_surebet_profit(event.outcomes)
+        if not is_surebet:
+            raise HTTPException(status_code=404, detail="Event is not a surebet")
+
+        return schemas.SurebetEvent(
+            id=event.id,
+            event_id=event.event_id,
+            event=event.event,
+            sport=event.sport,
+            outcomes=[
+                schemas.Outcome(
+                    id=o.id,
+                    event_id=o.event_id,
+                    bookmaker=o.bookmaker,
+                    name=o.name,
+                    odds=o.odds,
+                    deep_link_url=o.deep_link_url,
+                )
+                for o in event.outcomes
+            ],
+            profit_percentage=profit_percentage,
+            total_inverse_odds=total_inverse_odds,
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"❌ Database error while fetching surebet detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching surebet detail")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error while fetching surebet detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/v1/events/{event_id}", response_model=schemas.Event)
+async def get_event_detail(event_id: str, db: Session = Depends(get_db)):
+    """
+    Get a single event by its event_id regardless of surebet status.
+
+    This is useful for detail pages even when an arbitrage condition has
+    disappeared but the event and outcomes were recently saved.
+    """
+    try:
+        event = crud.get_event_by_event_id(db, event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        return schemas.Event(
+            id=event.id,
+            event_id=event.event_id,
+            event=event.event,
+            sport=event.sport,
+            outcomes=[
+                schemas.Outcome(
+                    id=o.id,
+                    event_id=o.event_id,
+                    bookmaker=o.bookmaker,
+                    name=o.name,
+                    odds=o.odds,
+                    deep_link_url=o.deep_link_url,
+                )
+                for o in event.outcomes
+            ],
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"❌ Database error while fetching event detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching event detail")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error while fetching event detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 # ============================================================================
 # The Odds API Endpoint - Production-Ready Integration
 # ============================================================================
