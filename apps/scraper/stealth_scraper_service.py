@@ -78,9 +78,204 @@ def simulate_human_behavior(page: Page):
         logger.warning(f"⚠️  Error simulating human behavior: {str(e)}")
 
 
+def scrape_betexplorer(page: Page, url: str) -> List[Dict]:
+    """
+    Scrape BetExplorer using production-grade selectors.
+    
+    Uses robust selectors:
+    - Row: .table-main__row:has-text('vs')
+    - Event name: a.table-main__participant
+    - Odds: td.table-main__odds (nth(0) for home, nth(1) for draw, nth(2) for away)
+    
+    Args:
+        page: Playwright page object
+        url: URL to scrape
+        
+    Returns:
+        List of events with odds
+    """
+    events = []
+    
+    try:
+        logger.info(f"🎯 Scraping BetExplorer: {url}")
+        
+        # Navigate and wait for content
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        simulate_human_behavior(page)
+        
+        # Wait for table rows to load
+        try:
+            page.wait_for_selector(".table-main__row", timeout=10000)
+        except Exception as e:
+            logger.warning(f"⚠️ Timeout waiting for BetExplorer rows: {str(e)}")
+            return events
+        
+        # Get all event rows (only those with 'vs' text)
+        rows = page.locator(".table-main__row:has-text('vs')").all()
+        logger.info(f"📊 Found {len(rows)} event rows on BetExplorer")
+        
+        for row in rows[:20]:  # Limit to 20 rows
+            try:
+                # Extract event name
+                event_link = row.locator("a.table-main__participant").first
+                event_name = event_link.text_content() if event_link else None
+                
+                if not event_name:
+                    continue
+                
+                event_name = event_name.strip()
+                
+                # Extract deep link
+                href = event_link.get_attribute("href") if event_link else None
+                deep_link = f"https://www.betexplorer.com{href}" if href else url
+                
+                # Extract odds (home, draw, away)
+                odds = []
+                odds_cells = row.locator("td.table-main__odds").all()
+                
+                for i in range(min(3, len(odds_cells))):  # Get first 3 odds
+                    try:
+                        odds_text = odds_cells[i].text_content()
+                        if odds_text:
+                            odds_value = float(odds_text.strip())
+                            if 1.01 <= odds_value <= 100:
+                                odds.append(odds_value)
+                    except (ValueError, AttributeError):
+                        continue
+                
+                if event_name and len(odds) >= 2:
+                    events.append({
+                        "event_name": event_name,
+                        "odds": odds,
+                        "source": "BetExplorer",
+                        "deep_link": deep_link
+                    })
+                    logger.debug(f"  ✓ {event_name}: {odds}")
+                    
+            except Exception as e:
+                logger.debug(f"  ⚠️ Error processing row: {str(e)}")
+                continue
+        
+        logger.info(f"✅ Scraped {len(events)} events from BetExplorer")
+        
+    except Exception as e:
+        logger.error(f"❌ Error scraping BetExplorer: {str(e)}")
+    
+    return events
+
+
+def scrape_oddschecker(page: Page, url: str) -> List[Dict]:
+    """
+    Scrape Oddschecker using production-grade data-testid selectors.
+    
+    Uses data-testid attributes:
+    - Row: [data-testid="coupon-event-row"]
+    - Event name: [data-testid="coupon-event-name"]
+    - Odds cells: [data-testid^="odds-cell-"] (extract bookmaker from testid)
+    
+    Args:
+        page: Playwright page object
+        url: URL to scrape
+        
+    Returns:
+        List of events with odds
+    """
+    events = []
+    
+    try:
+        logger.info(f"🎯 Scraping Oddschecker: {url}")
+        
+        # Navigate and wait for content
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        simulate_human_behavior(page)
+        
+        # Wait for event rows to load
+        try:
+            page.wait_for_selector('[data-testid="coupon-event-row"]', timeout=10000)
+        except Exception as e:
+            logger.warning(f"⚠️ Timeout waiting for Oddschecker rows: {str(e)}")
+            return events
+        
+        # Get all event rows
+        rows = page.locator('[data-testid="coupon-event-row"]').all()
+        logger.info(f"📊 Found {len(rows)} event rows on Oddschecker")
+        
+        for row in rows[:20]:  # Limit to 20 rows
+            try:
+                # Extract event name
+                event_name_el = row.locator('[data-testid="coupon-event-name"]').first
+                event_name = event_name_el.text_content() if event_name_el else None
+                
+                if not event_name:
+                    continue
+                
+                event_name = event_name.strip()
+                
+                # Extract deep link
+                link = row.locator("a").first
+                href = link.get_attribute("href") if link else None
+                deep_link = f"https://www.oddschecker.com{href}" if href and href.startswith('/') else href or url
+                
+                # Extract odds from odds cells
+                # Oddschecker has odds cells with data-testid like "odds-cell-{bookmaker}"
+                odds = []
+                odds_cells = row.locator('[data-testid^="odds-cell-"]').all()
+                
+                for cell in odds_cells[:10]:  # Limit to 10 odds cells
+                    try:
+                        # Get odds value from cell text
+                        odds_text = cell.text_content()
+                        if odds_text:
+                            # Parse fractional or decimal odds
+                            odds_text = odds_text.strip()
+                            
+                            # Try decimal format first (e.g., "2.50")
+                            try:
+                                odds_value = float(odds_text)
+                                if 1.01 <= odds_value <= 100:
+                                    odds.append(odds_value)
+                            except ValueError:
+                                # Try fractional format (e.g., "6/4")
+                                if '/' in odds_text:
+                                    parts = odds_text.split('/')
+                                    if len(parts) == 2:
+                                        try:
+                                            numerator = float(parts[0])
+                                            denominator = float(parts[1])
+                                            if denominator != 0:
+                                                decimal_odds = (numerator / denominator) + 1
+                                                if 1.01 <= decimal_odds <= 100:
+                                                    odds.append(round(decimal_odds, 2))
+                                        except ValueError:
+                                            pass
+                    except Exception as e:
+                        logger.debug(f"  ⚠️ Error parsing odds cell: {str(e)}")
+                        continue
+                
+                if event_name and len(odds) >= 2:
+                    events.append({
+                        "event_name": event_name,
+                        "odds": odds,
+                        "source": "Oddschecker",
+                        "deep_link": deep_link
+                    })
+                    logger.debug(f"  ✓ {event_name}: {odds}")
+                    
+            except Exception as e:
+                logger.debug(f"  ⚠️ Error processing row: {str(e)}")
+                continue
+        
+        logger.info(f"✅ Scraped {len(events)} events from Oddschecker")
+        
+    except Exception as e:
+        logger.error(f"❌ Error scraping Oddschecker: {str(e)}")
+    
+    return events
+
+
 def scrape_with_stealth(url: str, page: Page) -> List[Dict]:
     """
-    Scrape a single URL using stealth techniques and resilient selectors.
+    Scrape a single URL using site-specific production-grade selectors.
     
     Args:
         url: The URL to scrape
@@ -89,116 +284,14 @@ def scrape_with_stealth(url: str, page: Page) -> List[Dict]:
     Returns:
         List of events with odds data
     """
-    events = []
-    
-    try:
-        logger.info(f"🎯 Navigating to: {url}")
-        
-        # Navigate with a realistic timeout
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        
-        # Simulate human behavior
-        simulate_human_behavior(page)
-        
-        # Wait for content to load
-        time.sleep(random.uniform(2, 4))
-        
-        # Try multiple strategies to find betting data
-        # Strategy 1: Look for odds tables using role-based selectors
-        try:
-            tables = page.get_by_role("table").all()
-            logger.info(f"📊 Found {len(tables)} tables on the page")
-            
-            for table in tables[:5]:  # Limit to first 5 tables
-                try:
-                    # Extract rows
-                    rows = table.get_by_role("row").all()
-                    
-                    for row in rows[:10]:  # Limit rows per table
-                        try:
-                            cells = row.get_by_role("cell").all()
-                            
-                            if len(cells) >= 3:
-                                # Try to extract event name and odds
-                                event_text = cells[0].text_content() or ""
-                                
-                                # Look for decimal odds patterns (e.g., 2.50, 1.95)
-                                odds = []
-                                for cell in cells[1:]:
-                                    text = cell.text_content() or ""
-                                    # Try to parse as float
-                                    try:
-                                        odd = float(text.strip())
-                                        if 1.01 <= odd <= 100:  # Valid odds range
-                                            odds.append(odd)
-                                    except ValueError:
-                                        continue
-                                
-                                if event_text and len(odds) >= 2:
-                                    events.append({
-                                        "event_name": event_text.strip(),
-                                        "odds": odds,
-                                        "source": url.split('/')[2],  # domain name
-                                        "deep_link": url
-                                    })
-                                    logger.debug(f"  ✓ Extracted: {event_text[:50]}... with {len(odds)} odds")
-                        except Exception as e:
-                            logger.debug(f"  ⚠️  Error processing row: {str(e)}")
-                            continue
-                except Exception as e:
-                    logger.debug(f"  ⚠️  Error processing table: {str(e)}")
-                    continue
-        except Exception as e:
-            logger.warning(f"⚠️  Strategy 1 (tables) failed: {str(e)}")
-        
-        # Strategy 2: Look for specific betting-related text patterns
-        try:
-            # Look for elements containing "vs" or "odds"
-            event_elements = page.get_by_text("vs", exact=False).all()
-            logger.info(f"🔍 Found {len(event_elements)} elements with 'vs' text")
-            
-            for element in event_elements[:20]:  # Limit to 20 elements
-                try:
-                    event_text = element.text_content() or ""
-                    
-                    # Look for nearby odds
-                    parent = element.locator("xpath=..")
-                    parent_text = parent.text_content() or ""
-                    
-                    # Extract odds from parent text
-                    import re
-                    odds_pattern = r'\b([1-9]\d*\.?\d+)\b'
-                    potential_odds = re.findall(odds_pattern, parent_text)
-                    
-                    odds = []
-                    for odd_str in potential_odds:
-                        try:
-                            odd = float(odd_str)
-                            if 1.01 <= odd <= 100:
-                                odds.append(odd)
-                        except ValueError:
-                            continue
-                    
-                    if event_text and len(odds) >= 2:
-                        events.append({
-                            "event_name": event_text.strip(),
-                            "odds": odds[:6],  # Limit to 6 odds
-                            "source": url.split('/')[2],
-                            "deep_link": url
-                        })
-                        logger.debug(f"  ✓ Extracted from text: {event_text[:50]}...")
-                except Exception as e:
-                    logger.debug(f"  ⚠️  Error processing element: {str(e)}")
-                    continue
-        except Exception as e:
-            logger.warning(f"⚠️  Strategy 2 (text search) failed: {str(e)}")
-        
-        logger.info(f"✅ Scraped {len(events)} events from {url}")
-        
-    except Exception as e:
-        logger.error(f"❌ Error scraping {url}: {str(e)}")
-    
-    return events
+    # Route to site-specific scraper based on domain
+    if "betexplorer.com" in url:
+        return scrape_betexplorer(page, url)
+    elif "oddschecker.com" in url:
+        return scrape_oddschecker(page, url)
+    else:
+        logger.warning(f"⚠️ No specific scraper for URL: {url}")
+        return []
 
 
 def run_stealth_scrape() -> List[Dict]:
@@ -223,6 +316,8 @@ def run_stealth_scrape() -> List[Dict]:
         logger.warning("⚠️  No proxy configured - scraping without proxy (may be detected)")
     
     all_events = []
+    targets_processed = 0
+    targets_succeeded = 0
     
     try:
         with sync_playwright() as playwright:
@@ -299,9 +394,15 @@ def run_stealth_scrape() -> List[Dict]:
             
             # Scrape each target URL
             for url in TARGET_URLS:
+                targets_processed += 1
                 try:
                     events = scrape_with_stealth(url, page)
-                    all_events.extend(events)
+                    if events:
+                        all_events.extend(events)
+                        targets_succeeded += 1
+                        logger.info(f"✅ Successfully scraped {url}: {len(events)} events")
+                    else:
+                        logger.warning(f"⚠️ No events found from {url}")
                     
                     # Random delay between sites (longer for more natural behavior)
                     delay = random.uniform(4, 8)
@@ -315,7 +416,11 @@ def run_stealth_scrape() -> List[Dict]:
             context.close()
             browser.close()
             
-            logger.info(f"✅ Stealth scraping complete! Total events: {len(all_events)}")
+            # Final summary log
+            logger.info("=" * 80)
+            logger.info(f"✅ Scraping job complete. Succeeded on {targets_succeeded}/{targets_processed} targets.")
+            logger.info(f"📊 Found a total of {len(all_events)} events across all sites.")
+            logger.info("=" * 80)
             
     except Exception as e:
         logger.error(f"❌ Fatal error in stealth scraper: {str(e)}")

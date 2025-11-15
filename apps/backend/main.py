@@ -720,15 +720,22 @@ async def delete_scraper_target_endpoint(
 @app.post("/api/v1/scraper/run")
 async def trigger_scraper():
     """
-    Trigger the scraper to run immediately.
+    Trigger the STEALTH scraper to run with advanced anti-detection measures.
 
-    This endpoint sends a request to the scraper service to start scraping.
+    This endpoint uses:
+    - Playwright-stealth to bypass bot detection
+    - Residential proxy support (configure PROXY_URL in .env)
+    - Human-like behavior simulation (mouse movements, scrolling, delays)
+    - Production-grade selectors (data-testid and robust CSS selectors)
+
+    The stealth scraper is designed to bypass Cloudflare and other
+    anti-bot protections with reliable, modern selectors.
 
     Returns:
-        Success message with scraper status
+        Success message with scraper status and features
     """
     try:
-        logger.info("Triggering scraper run...")
+        logger.info("🕵️ Triggering unified STEALTH scraper run...")
 
         # Make POST request to scraper service
         scraper_url = "http://scraper:8001/run-scrape"
@@ -739,85 +746,30 @@ async def trigger_scraper():
         )
 
         if response.status_code == 200:
-            logger.info("Scraper triggered successfully")
+            logger.info("✅ Stealth scraper triggered successfully")
             return response.json()
         else:
-            logger.error(f"Scraper service returned error: {response.status_code}")
+            logger.error(f"❌ Scraper service returned error: {response.status_code}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Scraper service error: {response.text}"
             )
 
     except requests.exceptions.ConnectionError:
-        logger.error("Could not connect to scraper service")
+        logger.error("❌ Could not connect to scraper service")
         raise HTTPException(
             status_code=503,
             detail="Scraper service is not available"
         )
     except requests.exceptions.Timeout:
-        logger.error("Request to scraper service timed out")
+        logger.error("❌ Request to scraper service timed out")
         raise HTTPException(
             status_code=504,
             detail="Scraper service timed out"
         )
     except Exception as e:
-        logger.error(f"Error triggering scraper: {str(e)}")
+        logger.error(f"❌ Error triggering scraper: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error triggering scraper: {str(e)}")
-
-
-@app.post("/api/v1/scraper/run-stealth")
-async def trigger_stealth_scraper():
-    """
-    Trigger the STEALTH scraper to run with advanced anti-detection measures.
-
-    This endpoint uses:
-    - Playwright-stealth to bypass bot detection
-    - Residential proxy support (configure PROXY_URL in .env)
-    - Human-like behavior simulation (mouse movements, scrolling, delays)
-    - Resilient selectors (role-based and text-based queries)
-
-    The stealth scraper is designed to bypass Cloudflare and other
-    anti-bot protections that block the regular scraper.
-
-    Returns:
-        Success message with stealth scraper status and features
-    """
-    try:
-        logger.info("🕵️  Triggering STEALTH scraper run...")
-
-        # Make POST request to stealth scraper endpoint
-        scraper_url = "http://scraper:8001/run-stealth-scrape"
-        
-        response = requests.post(
-            scraper_url,
-            timeout=5  # Short timeout since scraper runs in background
-        )
-
-        if response.status_code == 200:
-            logger.info("✅ Stealth scraper triggered successfully")
-            return response.json()
-        else:
-            logger.error(f"❌ Stealth scraper service returned error: {response.status_code}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Stealth scraper service error: {response.text}"
-            )
-
-    except requests.exceptions.ConnectionError:
-        logger.error("❌ Could not connect to stealth scraper service")
-        raise HTTPException(
-            status_code=503,
-            detail="Stealth scraper service is not available"
-        )
-    except requests.exceptions.Timeout:
-        logger.error("❌ Request to stealth scraper service timed out")
-        raise HTTPException(
-            status_code=504,
-            detail="Stealth scraper service timed out"
-        )
-    except Exception as e:
-        logger.error(f"❌ Error triggering stealth scraper: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error triggering stealth scraper: {str(e)}")
 
 
 @app.post("/api/v1/scraper/test-target")

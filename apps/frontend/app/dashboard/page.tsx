@@ -54,7 +54,6 @@ export default function DashboardPage() {
   const [surebets, setSurebets] = useState<SurebetEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isScraperLoading, setIsScraperLoading] = useState(false);
-  const [isStealthLoading, setIsStealthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scraperError, setScraperError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -113,13 +112,13 @@ export default function DashboardPage() {
     }
   };
 
-  // Handler for triggering the scraper
+  // Handler for triggering the scraper (unified - now uses stealth by default)
   const handleRunScraper = async () => {
     try {
       setIsScraperLoading(true);
       setError(null);
 
-      toast.info("Triggering scraper to fetch data...");
+      toast.info("🕵️ Running scraper with anti-detection measures...");
 
       const response = await fetch("http://localhost:8000/api/v1/scraper/run", {
         method: "POST",
@@ -132,7 +131,7 @@ export default function DashboardPage() {
       const data = await response.json();
 
       toast.success(
-        "Scraper triggered! Data will be updated automatically via WebSocket."
+        "✅ Scraper activated! Data will be updated automatically."
       );
       console.log("✅ Scraper triggered successfully:", data);
 
@@ -145,7 +144,7 @@ export default function DashboardPage() {
           const checkData = await checkResponse.json();
           if (checkData.total_count === 0) {
             const errorMsg =
-              "⚠️ Basic scraper completed but found no events. Target sites may be blocking scraping or have no live odds available.";
+              "⚠️ Scraper completed but found no events. Sites may be blocking or have no live odds available.";
             setScraperError(errorMsg);
             toast.warning(errorMsg);
           } else {
@@ -154,7 +153,7 @@ export default function DashboardPage() {
         } catch (e) {
           console.log("Could not check scraper results:", e);
         }
-      }, 8000);
+      }, 10000);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to trigger scraper";
@@ -162,65 +161,6 @@ export default function DashboardPage() {
       toast.error(`Failed to trigger scraper: ${errorMessage}`);
     } finally {
       setIsScraperLoading(false);
-    }
-  };
-
-  // Handler for triggering the stealth scraper
-  const handleRunStealthScraper = async () => {
-    try {
-      setIsStealthLoading(true);
-      setError(null);
-
-      toast.info(
-        "🕵️ Triggering stealth scraper with anti-detection measures..."
-      );
-
-      const response = await fetch(
-        "http://localhost:8000/api/v1/scraper/run-stealth",
-        {
-          method: "POST",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      toast.success(
-        "🕵️ Stealth scraper activated! Using playwright-stealth + proxies."
-      );
-      console.log("✅ Stealth scraper triggered successfully:", data);
-
-      // Poll for results after a few seconds to provide feedback
-      setTimeout(async () => {
-        try {
-          const checkResponse = await fetch(
-            "http://localhost:8000/api/v1/surebets"
-          );
-          const checkData = await checkResponse.json();
-          if (checkData.total_count === 0) {
-            const errorMsg =
-              "⚠️ Stealth scraper completed but found no events. Sites may still be blocking scraping, or selectors need updates. Try configuring a proxy in .env (PROXY_URL).";
-            setScraperError(errorMsg);
-            toast.warning(errorMsg);
-          } else {
-            setScraperError(null);
-          }
-        } catch (e) {
-          console.log("Could not check stealth scraper results:", e);
-        }
-      }, 12000);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Failed to trigger stealth scraper";
-      console.error("❌ Error triggering stealth scraper:", errorMessage);
-      toast.error(`Failed to trigger stealth scraper: ${errorMessage}`);
-    } finally {
-      setIsStealthLoading(false);
     }
   };
 
@@ -365,23 +305,29 @@ export default function DashboardPage() {
                   </Button>
                 </div>
 
-                {/* Scraper Section */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-amber-50 dark:bg-amber-950 rounded-lg">
+                {/* Scraper Section - Unified */}
+                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border-2 border-purple-200 dark:border-purple-800">
                   <div className="flex-1 space-y-2">
-                    <h3 className="font-semibold text-sm">
-                      Web Scraper (Basic)
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      🕵️ Web Scraper (Stealth Mode)
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      Direct scraping from betting sites (may be blocked by
-                      Cloudflare)
+                      Advanced scraping with anti-detection, proxies, and human
+                      behavior simulation
                     </p>
+                    <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
+                      <li>Bypasses Cloudflare & bot detection</li>
+                      <li>Residential proxy support (optional)</li>
+                      <li>Human-like mouse movements & scrolling</li>
+                      <li>Production-grade selectors</li>
+                    </ul>
                   </div>
                   <Button
                     onClick={handleRunScraper}
                     disabled={isScraperLoading}
                     size="lg"
-                    variant="outline"
-                    className="w-full sm:w-auto"
+                    variant="default"
+                    className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
                   >
                     {isScraperLoading ? (
                       <>
@@ -391,60 +337,7 @@ export default function DashboardPage() {
                     ) : (
                       <>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Run Basic Scraper
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* Stealth Scraper Section */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-purple-50 dark:bg-purple-950 rounded-lg border-2 border-purple-200 dark:border-purple-800">
-                  <div className="flex-1 space-y-2">
-                    <h3 className="font-semibold text-sm flex items-center gap-2">
-                      🕵️ Stealth Scraper (Advanced)
-                      <span className="text-xs bg-purple-200 dark:bg-purple-800 px-2 py-0.5 rounded">
-                        NEW
-                      </span>
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Anti-detection scraper with playwright-stealth, proxies,
-                      and human behavior simulation
-                    </p>
-                    <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
-                      <li>Bypasses Cloudflare protection</li>
-                      <li>Residential proxy support</li>
-                      <li>Mouse movements & scrolling</li>
-                      <li>Random delays & timing</li>
-                    </ul>
-                  </div>
-                  <Button
-                    onClick={handleRunStealthScraper}
-                    disabled={isStealthLoading}
-                    size="lg"
-                    variant="default"
-                    className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
-                  >
-                    {isStealthLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Running...
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          className="mr-2 h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                          />
-                        </svg>
-                        Run Stealth Scraper
+                        Update Live Odds
                       </>
                     )}
                   </Button>

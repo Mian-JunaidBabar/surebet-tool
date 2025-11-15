@@ -601,50 +601,31 @@ async def health_check():
 @app.post("/run-scrape")
 async def trigger_scrape(background_tasks: BackgroundTasks):
     """
-    Trigger a scraping job.
-    
-    The scraping runs in the background, so this endpoint returns immediately.
-    """
-    logger.info("📨 Received scrape trigger request")
-    
-    # Add the scraping task to background tasks
-    background_tasks.add_task(run_the_scrape)
-    
-    return {
-        "status": "accepted",
-        "message": "Scraping job started in background",
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-
-@app.post("/run-stealth-scrape")
-async def trigger_stealth_scrape(background_tasks: BackgroundTasks):
-    """
     Trigger a STEALTH scraping job using playwright-stealth and proxies.
     
     This endpoint uses advanced anti-detection techniques:
     - Playwright-stealth patches to avoid bot detection
     - Proxy support for IP rotation (configure PROXY_URL in .env)
     - Human-like behavior simulation (mouse movements, random delays)
-    - Resilient selectors (role-based and text-based queries)
+    - Production-grade selectors (data-testid and robust CSS selectors)
     
     The scraping runs in the background, so this endpoint returns immediately.
     Results are automatically sent to the backend for processing.
     """
-    logger.info("🕵️  Received STEALTH scrape trigger request")
+    logger.info("🕵️ Received unified STEALTH scrape trigger request")
     
     # Add the stealth scraping task to background tasks
     background_tasks.add_task(run_stealth_scrape_task)
     
     return {
         "status": "accepted",
-        "message": "Stealth scraping job started in background with anti-detection measures",
+        "message": "Stealth scraping job started with anti-detection measures",
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "features": [
             "Playwright-stealth enabled",
             "Human behavior simulation",
             "Proxy support (if configured)",
-            "Resilient selectors"
+            "Production-grade selectors"
         ]
     }
 
