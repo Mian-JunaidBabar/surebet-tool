@@ -101,6 +101,7 @@ export default function BetDetailPage() {
   const [plain, setPlain] = useState<PlainEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -168,8 +169,6 @@ export default function BetDetailPage() {
     .filter(Boolean)
     .slice(0, 3);
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6 flex items-center justify-between gap-2">
@@ -198,7 +197,7 @@ export default function BetDetailPage() {
               </div>
 
               <SheetFooter>
-                <SheetClose>
+                <SheetClose asChild>
                   <Button variant="outline">Close</Button>
                 </SheetClose>
               </SheetFooter>

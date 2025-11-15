@@ -293,7 +293,7 @@ export const columns: ColumnDef<SurebetEvent>[] = [
                   </div>
 
                   <SheetFooter>
-                    <SheetClose>
+                    <SheetClose asChild>
                       <Button variant="outline">Close</Button>
                     </SheetClose>
                   </SheetFooter>
