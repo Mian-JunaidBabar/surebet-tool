@@ -36,10 +36,11 @@ def simulate_human_behavior(page: Page):
     - Random mouse movements
     - Random scrolling
     - Random delays between actions
+    - Random viewport resizing
     """
     try:
-        # Random delay before interacting
-        time.sleep(random.uniform(1.5, 3.5))
+        # Random delay before interacting (more variation)
+        time.sleep(random.uniform(1.0, 4.0))
         
         # Get viewport size
         viewport = page.viewport_size
@@ -47,21 +48,30 @@ def simulate_human_behavior(page: Page):
             width = viewport['width']
             height = viewport['height']
             
-            # Simulate random mouse movements
-            for _ in range(random.randint(2, 4)):
+            # Simulate more natural mouse movements
+            for _ in range(random.randint(3, 6)):
                 x = random.randint(100, width - 100)
                 y = random.randint(100, height - 100)
+                # Move mouse with slight delay between steps for smoothness
                 page.mouse.move(x, y)
-                time.sleep(random.uniform(0.1, 0.3))
+                time.sleep(random.uniform(0.05, 0.25))
             
-            # Simulate scrolling
-            scroll_amount = random.randint(200, 600)
+            # Simulate realistic scrolling patterns
+            # Initial scroll down
+            scroll_amount = random.randint(300, 800)
             page.mouse.wheel(0, scroll_amount)
-            time.sleep(random.uniform(0.5, 1.5))
+            time.sleep(random.uniform(0.8, 2.0))
             
-            # Scroll back up a bit
-            page.mouse.wheel(0, -random.randint(50, 150))
-            time.sleep(random.uniform(0.3, 0.8))
+            # Small scroll adjustments (like reading)
+            for _ in range(random.randint(1, 3)):
+                small_scroll = random.randint(-100, 200)
+                page.mouse.wheel(0, small_scroll)
+                time.sleep(random.uniform(0.4, 1.2))
+            
+            # Occasional scroll back up
+            if random.random() > 0.5:
+                page.mouse.wheel(0, -random.randint(50, 200))
+                time.sleep(random.uniform(0.3, 0.9))
         
         logger.info("✅ Simulated human-like behavior")
     except Exception as e:
@@ -247,19 +257,45 @@ def run_stealth_scrape() -> List[Dict]:
             # Launch browser
             browser: Browser = playwright.chromium.launch(**launch_options)
             
+            # Randomize viewport size for more human-like behavior
+            viewport_sizes = [
+                {"width": 1920, "height": 1080},
+                {"width": 1366, "height": 768},
+                {"width": 1440, "height": 900},
+                {"width": 1536, "height": 864},
+            ]
+            selected_viewport = random.choice(viewport_sizes)
+            
+            # Randomize user agent
+            user_agents = [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            ]
+            selected_ua = random.choice(user_agents)
+            
+            # Randomize timezone
+            timezones = ["America/New_York", "America/Chicago", "America/Los_Angeles", "Europe/London"]
+            selected_tz = random.choice(timezones)
+            
             # Create context with realistic settings
             context = browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport=selected_viewport,
+                user_agent=selected_ua,
                 locale="en-US",
-                timezone_id="America/New_York"
+                timezone_id=selected_tz,
+                # Add more realistic browser features
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
             )
             
             # Create page and apply stealth patches
             page = context.new_page()
             stealth_sync(page)
             
-            logger.info("✅ Browser launched with stealth mode enabled")
+            logger.info(f"✅ Browser launched with stealth mode (viewport: {selected_viewport['width']}x{selected_viewport['height']}, tz: {selected_tz})")
             
             # Scrape each target URL
             for url in TARGET_URLS:
@@ -267,8 +303,10 @@ def run_stealth_scrape() -> List[Dict]:
                     events = scrape_with_stealth(url, page)
                     all_events.extend(events)
                     
-                    # Random delay between sites
-                    time.sleep(random.uniform(3, 6))
+                    # Random delay between sites (longer for more natural behavior)
+                    delay = random.uniform(4, 8)
+                    logger.info(f"⏳ Waiting {delay:.1f}s before next target...")
+                    time.sleep(delay)
                 except Exception as e:
                     logger.error(f"❌ Error scraping {url}: {str(e)}")
                     continue

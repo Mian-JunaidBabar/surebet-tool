@@ -113,25 +113,31 @@ export function DataTable<TData, TValue>({
       table.getColumn("bookmakers")?.setFilterValue(undefined);
     }
 
-    // Time filter ("any" means no filter)
-    if (timeFilter && timeFilter !== "any") {
-      const now = Date.now();
-      let timeThreshold = now;
-      switch (timeFilter) {
-        case "1h":
-          timeThreshold = now - 60 * 60 * 1000;
-          break;
-        case "6h":
-          timeThreshold = now - 6 * 60 * 60 * 1000;
-          break;
-        case "24h":
-          timeThreshold = now - 24 * 60 * 60 * 1000;
-          break;
+    // Time filter (disabled until we add a discoveredAt column)
+    // Guard to avoid calling getColumn on non-existent column
+    const hasDiscoveredAt = table
+      .getAllColumns()
+      .some((c) => c.id === "discoveredAt");
+    if (hasDiscoveredAt) {
+      if (timeFilter && timeFilter !== "any") {
+        const now = Date.now();
+        let timeThreshold = now;
+        switch (timeFilter) {
+          case "1h":
+            timeThreshold = now - 60 * 60 * 1000;
+            break;
+          case "6h":
+            timeThreshold = now - 6 * 60 * 60 * 1000;
+            break;
+          case "24h":
+            timeThreshold = now - 24 * 60 * 60 * 1000;
+            break;
+        }
+        table.getColumn("discoveredAt")?.setFilterValue(timeThreshold);
+        filters.push({ id: "discoveredAt", value: timeThreshold });
+      } else {
+        table.getColumn("discoveredAt")?.setFilterValue(undefined);
       }
-      table.getColumn("discoveredAt")?.setFilterValue(timeThreshold);
-      filters.push({ id: "discoveredAt", value: timeThreshold });
-    } else {
-      table.getColumn("discoveredAt")?.setFilterValue(undefined);
     }
 
     setColumnFilters(filters);
@@ -152,7 +158,6 @@ export function DataTable<TData, TValue>({
     minProfit ||
     maxProfit ||
     (bookmakerFilter && bookmakerFilter !== "all") ||
-    (timeFilter && timeFilter !== "any") ||
     (table.getColumn("event")?.getFilterValue() as string) ||
     "";
 
@@ -301,20 +306,7 @@ export function DataTable<TData, TValue>({
                 />
               </Badge>
             )}
-            {timeFilter && (
-              <Badge variant="secondary" className="gap-1">
-                Time:{" "}
-                {timeFilter === "1h"
-                  ? "Last hour"
-                  : timeFilter === "6h"
-                  ? "Last 6 hours"
-                  : "Last 24 hours"}
-                <X
-                  className="h-3 w-3 cursor-pointer"
-                  onClick={() => setTimeFilter("")}
-                />
-              </Badge>
-            )}
+            {/* Time badge intentionally hidden until discoveredAt column exists */}
           </div>
         )}
       </div>

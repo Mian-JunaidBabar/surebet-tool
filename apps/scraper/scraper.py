@@ -44,10 +44,12 @@ import time
 import re
 import logging
 from fastapi import FastAPI, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from typing import List, Dict, Any, Optional
 from urllib.parse import urljoin
 from pydantic import BaseModel
+import threading
 
 # Import the stealth scraper service
 import stealth_scraper_service
@@ -1101,93 +1103,102 @@ async def generate_mock_data():
         }
 
 
-@app.post("/test-scrape")
-async def test_scrape_endpoint(request: TestScrapeRequest):
+def _run_test_scrape_sync(url: str, strategy: str) -> Dict[str, Any]:
     """
-    Test scraping a single URL without saving to database.
-    
-    This endpoint enables rapid iteration and debugging:
-    - Accepts a URL and scraping strategy
-    - Runs the scraper and returns raw JSON
-    - Does NOT send data to backend/database
-    - Returns immediately with results or error
-    
-    Example request:
-    {
-        "url": "https://www.betexplorer.com/football/",
-        "strategy": "betexplorer"
-    }
-    
-    Returns:
-    {
-        "success": true,
-        "events": [...],
-        "count": 10,
-        "message": "Successfully scraped 10 events"
-    }
+    Run a single test scrape synchronously using the Playwright Sync API.
+    This is executed in a worker thread to avoid the "Sync API inside asyncio loop" error.
     """
-    logger.info(f"🧪 Test scrape requested - URL: {request.url}, Strategy: {request.strategy}")
-    
     # Validate strategy
     valid_strategies = ["betexplorer", "oddschecker", "oddsportal"]
-    strategy = request.strategy.lower()
-    
     if strategy not in valid_strategies:
         return {
             "success": False,
             "error": f"Invalid strategy: {strategy}",
             "valid_strategies": valid_strategies,
-            "count": 0
+            "count": 0,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
-    
-    # Run the scraper
-    events = []
-    error_message = None
-    
+
+    events: List[Dict[str, Any]] = []
+    error_message: Optional[str] = None
+
     try:
         with sync_playwright() as p:
             logger.info("🌐 Launching browser for test scrape...")
             browser = p.chromium.launch(
                 headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
+                args=["--no-sandbox", "--disable-setuid-sandbox"],
             )
-            
+
             try:
                 page = browser.new_page()
-                
-                # Route to appropriate scraper
                 logger.info(f"🎯 Routing to {strategy} scraper...")
-                events = route_scraper(page, request.url, strategy)
-                
+                events = route_scraper(page, url, strategy)
                 page.close()
-                
             except Exception as scrape_error:
                 error_message = f"Scraping error: {str(scrape_error)}"
                 logger.error(f"❌ {error_message}")
             finally:
                 browser.close()
-    
     except Exception as e:
         error_message = f"Browser launch error: {str(e)}"
         logger.error(f"❌ {error_message}")
-    
-    # Return results
+
     if error_message:
         return {
             "success": False,
             "error": error_message,
             "events": events,
             "count": len(events),
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
     else:
+        # Provide a clearer message when no events are found
+        msg = (
+            f"Successfully scraped {len(events)} events"
+            if events
+            else "No events found. The target may be blocking scraping or selectors may need updates."
+        )
         return {
             "success": True,
-            "message": f"Successfully scraped {len(events)} events",
+            "message": msg,
             "events": events,
             "count": len(events),
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
+
+
+@app.post("/test-scrape")
+def test_scrape_endpoint(request: TestScrapeRequest):
+    """
+    Test scraping a single URL without saving to database.
+    Implemented as a synchronous route so FastAPI runs it in a dedicated OS thread,
+    which allows using Playwright's Sync API safely without an active asyncio loop.
+    """
+    logger.info(
+        f"🧪 Test scrape requested - URL: {request.url}, Strategy: {request.strategy}"
+    )
+
+    # Normalize strategy to lowercase for validation
+    strategy = request.strategy.lower()
+
+    # Run Playwright Sync API in a brand-new OS thread to avoid any running asyncio loop
+    result_container: Dict[str, Any] = {}
+
+    def _target():
+        result_container["result"] = _run_test_scrape_sync(request.url, strategy)
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join()
+
+    return result_container.get("result", {
+        "success": False,
+        "error": "Unknown error running test scrape thread",
+        "events": [],
+        "count": 0,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
 
 
 # Server entry point

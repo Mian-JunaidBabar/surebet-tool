@@ -133,6 +133,23 @@ export default function DashboardPage() {
         "Scraper triggered! Data will be updated automatically via WebSocket."
       );
       console.log("✅ Scraper triggered successfully:", data);
+
+      // Poll for results after a few seconds to provide feedback
+      setTimeout(async () => {
+        try {
+          const checkResponse = await fetch(
+            "http://localhost:8000/api/v1/surebets"
+          );
+          const checkData = await checkResponse.json();
+          if (checkData.total_count === 0) {
+            toast.warning(
+              "⚠️ Scraper completed but found no events. Target sites may be blocking or have no live odds."
+            );
+          }
+        } catch (e) {
+          console.log("Could not check scraper results:", e);
+        }
+      }, 8000);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to trigger scraper";
@@ -170,6 +187,23 @@ export default function DashboardPage() {
         "🕵️ Stealth scraper activated! Using playwright-stealth + proxies."
       );
       console.log("✅ Stealth scraper triggered successfully:", data);
+
+      // Poll for results after a few seconds to provide feedback
+      setTimeout(async () => {
+        try {
+          const checkResponse = await fetch(
+            "http://localhost:8000/api/v1/surebets"
+          );
+          const checkData = await checkResponse.json();
+          if (checkData.total_count === 0) {
+            toast.warning(
+              "⚠️ Stealth scraper completed but found no events. Sites may still be blocking or have no live odds."
+            );
+          }
+        } catch (e) {
+          console.log("Could not check stealth scraper results:", e);
+        }
+      }, 12000);
     } catch (err) {
       const errorMessage =
         err instanceof Error
